@@ -2,12 +2,11 @@ name: Sync edgetunnel Worker
 
 on:
   schedule:
-    # 設定為 16:00 UTC，這對應到香港/台灣時間 (UTC+8) 的次日 00:00
-    - cron: "0 16 * * *"
-  workflow_dispatch: # 允許手動觸發
+    - cron: "0 16 * * *" # 香港時間 00:00
+  workflow_dispatch:
 
 permissions:
-  contents: write # 給予 workflow 寫倉庫的權限
+  contents: write
 
 jobs:
   sync:
@@ -16,37 +15,50 @@ jobs:
       - name: 檢出您的倉庫
         uses: actions/checkout@v4
 
-      - name: 下載最新的 _worker.js 和 wrangler.toml
+      - name: 下載檔案並設定時間戳訊息
+        id: check_changes
         run: |
-          # 日誌函數，方便在 Actions 紀錄中查看進度
-          log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"; }
-          
-          # --- 設定下載連結 ---
+          # --- 1. 設定變數與時間 ---
           URL_WORKER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js"
           URL_WRANGLER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/wrangler.toml"
           
-          # 1. 下載 _worker.js
-          log "開始下載 _worker.js ..."
+          # 取得香港時間 (Asia/Hong_Kong)，格式範例: 2023-12-09 12:30
+          HK_TIME=$(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M')
+          
+          # --- 2. 下載檔案 ---
+          echo "正在下載 _worker.js ..."
           curl -L -o "_worker.js" "$URL_WORKER"
-          if [ $? -ne 0 ]; then
-            log "ERROR: 下載 _worker.js 失敗"
-            exit 1
-          fi
           
-          # 2. 下載 wrangler.toml
-          log "開始下載 wrangler.toml ..."
+          echo "正在下載 wrangler.toml ..."
           curl -L -o "wrangler.toml" "$URL_WRANGLER"
-          if [ $? -ne 0 ]; then
-            log "ERROR: 下載 wrangler.toml 失敗"
-            exit 1
+
+          # --- 3. 檢測變更 ---
+          CHANGED_WORKER=$(git status --porcelain _worker.js)
+          CHANGED_WRANGLER=$(git status --porcelain wrangler.toml)
+
+          # --- 4. 生成提交訊息 ---
+          if [[ -n "$CHANGED_WORKER" ]] && [[ -n "$CHANGED_WRANGLER" ]]; then
+            # 兩個都變了 -> 顯示更新所有檔案 + 時間
+            MSG="🔄 同步更新所有檔案 (📅 $HK_TIME)"
+          elif [[ -n "$CHANGED_WORKER" ]]; then
+            # 只有 worker 變了 -> 顯示檔名 + 時間
+            MSG="🔄 自動同步 _worker.js (📅 $HK_TIME)"
+          elif [[ -n "$CHANGED_WRANGLER" ]]; then
+            # 只有 wrangler 變了 -> 顯示檔名 + 時間
+            MSG="🔄 自動同步 wrangler.toml (📅 $HK_TIME)"
+          else
+            # 沒變更 (不會提交，但設個預設值)
+            MSG="🔄 無變更 (📅 $HK_TIME)"
           fi
+
+          echo "生成的 Commit 訊息: $MSG"
           
-          log "所有檔案下載成功。"
+          # 寫入環境變數
+          echo "COMMIT_MSG=$MSG" >> $GITHUB_ENV
 
       - name: 提交更新到您的倉庫
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "🔄 自動同步 _worker.js 與 wrangler.toml"
-          # 使用指定的使用者資訊
+          commit_message: ${{ env.COMMIT_MSG }}
           commit_user_name: GitHub Actions Bot
           commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
