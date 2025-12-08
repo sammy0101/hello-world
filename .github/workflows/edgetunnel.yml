@@ -16,29 +16,37 @@ jobs:
       - name: 檢出您的倉庫
         uses: actions/checkout@v4
 
-      - name: 下載最新的 _worker.js
+      - name: 下載最新的 _worker.js 和 wrangler.toml
         run: |
           # 日誌函數，方便在 Actions 紀錄中查看進度
           log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"; }
           
-          # --- 核心修改點: 更新為正確的 raw 下載連結 ---
-          DOWNLOAD_URL="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js"
+          # --- 設定下載連結 ---
+          URL_WORKER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js"
+          URL_WRANGLER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/wrangler.toml"
           
-          log "開始從 $DOWNLOAD_URL 下載..."
-          curl -L -o "_worker.js" "$DOWNLOAD_URL"
-          
-          # 檢查下載是否成功
+          # 1. 下載 _worker.js
+          log "開始下載 _worker.js ..."
+          curl -L -o "_worker.js" "$URL_WORKER"
           if [ $? -ne 0 ]; then
             log "ERROR: 下載 _worker.js 失敗"
             exit 1
           fi
           
-          log "下載成功。"
+          # 2. 下載 wrangler.toml
+          log "開始下載 wrangler.toml ..."
+          curl -L -o "wrangler.toml" "$URL_WRANGLER"
+          if [ $? -ne 0 ]; then
+            log "ERROR: 下載 wrangler.toml 失敗"
+            exit 1
+          fi
+          
+          log "所有檔案下載成功。"
 
       - name: 提交更新到您的倉庫
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "🔄 自動同步 _worker.js"
+          commit_message: "🔄 自動同步 _worker.js 與 wrangler.toml"
           # 使用指定的使用者資訊
           commit_user_name: GitHub Actions Bot
           commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
