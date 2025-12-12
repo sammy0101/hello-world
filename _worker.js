@@ -1,82 +1,1481 @@
-<!DOCTYPE html>
-<!--
+﻿import { connect } from "cloudflare:sockets";
+let config_JSON, 反代IP = '', 启用SOCKS5反代 = null, 启用SOCKS5全局反代 = false, 我的SOCKS5账号 = '', parsedSocks5Address = {};
+let SOCKS5白名单 = ['*tapecontent.net', '*cloudatacdn.com', '*loadshare.org', '*cdn-centaurus.com', 'scholar.google.com'];
+const Pages静态页面 = 'https://edt-pages.github.io';
+///////////////////////////////////////////////////////主程序入口///////////////////////////////////////////////
+export default {
+    async fetch(request, env, ctx) {
+        const url = new URL(request.url);
+        const UA = request.headers.get('User-Agent') || 'null';
+        const upgradeHeader = request.headers.get('Upgrade');
+        const 管理员密码 = env.ADMIN || env.admin || env.PASSWORD || env.password || env.pswd || env.TOKEN || env.KEY || env.UUID || env.uuid;
+        const 加密秘钥 = env.KEY || '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改';
+        const userIDMD5 = await MD5MD5(管理员密码 + 加密秘钥);
+        const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+        const envUUID = env.UUID || env.uuid;
+        const userID = (envUUID && uuidRegex.test(envUUID)) ? envUUID.toLowerCase() : [userIDMD5.slice(0, 8), userIDMD5.slice(8, 12), '4' + userIDMD5.slice(13, 16), '8' + userIDMD5.slice(17, 20), userIDMD5.slice(20)].join('-');
+        const hosts = env.HOST ? (await 整理成数组(env.HOST)).map(h => h.toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0]) : [url.hostname];
+        const host = hosts[0];
+        if (env.PROXYIP) {
+            const proxyIPs = await 整理成数组(env.PROXYIP);
+            反代IP = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
+        } else 反代IP = (request.cf.colo + '.PrOxYIp.CmLiUsSsS.nEt').toLowerCase();
+        const 访问IP = request.headers.get('X-Real-IP') || request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || request.headers.get('True-Client-IP') || request.headers.get('Fly-Client-IP') || request.headers.get('X-Appengine-Remote-Addr') || request.headers.get('X-Forwarded-For') || request.headers.get('X-Real-IP') || request.headers.get('X-Cluster-Client-IP') || request.cf?.clientTcpRtt || '未知IP';
+        if (env.GO2SOCKS5) SOCKS5白名单 = await 整理成数组(env.GO2SOCKS5);
+        if (!upgradeHeader || upgradeHeader !== 'websocket') {
+            if (url.protocol === 'http:') return Response.redirect(url.href.replace(`http://${url.hostname}`, `https://${url.hostname}`), 301);
+            if (!管理员密码) return fetch(Pages静态页面 + '/noADMIN').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
+            if (!env.KV) return fetch(Pages静态页面 + '/noKV').then(r => { const headers = new Headers(r.headers); headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate'); headers.set('Pragma', 'no-cache'); headers.set('Expires', '0'); return new Response(r.body, { status: 404, statusText: r.statusText, headers }); });
+            const 访问路径 = url.pathname.slice(1).toLowerCase();
+            const 区分大小写访问路径 = url.pathname.slice(1);
+            if (访问路径 === 加密秘钥 && 加密秘钥 !== '勿动此默认密钥，有需求请自行通过添加变量KEY进行修改') {//快速订阅
+                const params = new URLSearchParams(url.search);
+                params.set('token', await MD5MD5(host + userID));
+                return new Response('重定向中...', { status: 302, headers: { 'Location': `/sub?${params.toString()}` } });
+            } else if (访问路径 === 'login') {//处理登录页面和登录请求
+                const cookies = request.headers.get('Cookie') || '';
+                const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
+                if (authCookie == await MD5MD5(UA + 加密秘钥 + 管理员密码)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/admin' } });
+                if (request.method === 'POST') {
+                    const formData = await request.text();
+                    const params = new URLSearchParams(formData);
+                    const 输入密码 = params.get('password');
+                    if (输入密码 === 管理员密码) {
+                        // 密码正确，设置cookie并返回成功标记
+                        const 响应 = new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        响应.headers.set('Set-Cookie', `auth=${await MD5MD5(UA + 加密秘钥 + 管理员密码)}; Path=/; Max-Age=86400; HttpOnly`);
+                        return 响应;
+                    }
+                }
+                return fetch(Pages静态页面 + '/login');
+            } else if (访问路径 === 'admin' || 访问路径.startsWith('admin/')) {//验证cookie后响应管理页面
+                const cookies = request.headers.get('Cookie') || '';
+                const authCookie = cookies.split(';').find(c => c.trim().startsWith('auth='))?.split('=')[1];
+                // 没有cookie或cookie错误，跳转到/login页面
+                if (!authCookie || authCookie !== await MD5MD5(UA + 加密秘钥 + 管理员密码)) return new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
+                if (访问路径 === 'admin/log.json') {// 读取日志内容
+                    const 读取日志内容 = await env.KV.get('log.json') || '[]';
+                    return new Response(读取日志内容, { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                } else if (区分大小写访问路径 === 'admin/getCloudflareUsage') {// 查询请求量
+                    try {
+                        const Usage_JSON = await getCloudflareUsage(url.searchParams.get('Email'), url.searchParams.get('GlobalAPIKey'), url.searchParams.get('AccountID'), url.searchParams.get('APIToken'));
+                        return new Response(JSON.stringify(Usage_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                    } catch (err) {
+                        const errorResponse = { msg: '查询请求量失败，失败原因：' + err.message, error: err.message };
+                        return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    }
+                } else if (区分大小写访问路径 === 'admin/getADDAPI') {// 验证优选API
+                    if (url.searchParams.get('url')) {
+                        const 待验证优选URL = url.searchParams.get('url');
+                        try {
+                            new URL(待验证优选URL);
+                            const 优选API的IP = await 请求优选API([待验证优选URL], url.searchParams.get('port') || '443');
+                            return new Response(JSON.stringify({ success: true, data: 优选API的IP }, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        } catch (err) {
+                            const errorResponse = { msg: '验证优选API失败，失败原因：' + err.message, error: err.message };
+                            return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        }
+                    }
+                    return new Response(JSON.stringify({ success: false, data: [] }, null, 2), { status: 403, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                } else if (访问路径 === 'admin/check') {// SOCKS5代理检查
+                    let 检测代理响应;
+                    if (url.searchParams.has('socks5')) {
+                        检测代理响应 = await SOCKS5可用性验证('socks5', url.searchParams.get('socks5'));
+                    } else if (url.searchParams.has('http')) {
+                        检测代理响应 = await SOCKS5可用性验证('http', url.searchParams.get('http'));
+                    } else {
+                        return new Response(JSON.stringify({ error: '缺少代理参数' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    }
+                    return new Response(JSON.stringify(检测代理响应, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                }
 
-Hello future GitHubber! I bet you're here to remove those nasty inline styles,
-DRY up these templates and make 'em nice and re-usable, right?
+                config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
 
-Please, don't. https://github.com/styleguide/templates/2.0
+                if (访问路径 === 'admin/init') {// 重置配置为默认值
+                    try {
+                        config_JSON = await 读取config_JSON(env, host, userID, env.PATH, true);
+                        ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Init_Config', config_JSON));
+                        config_JSON.init = '配置已重置为默认值';
+                        return new Response(JSON.stringify(config_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    } catch (err) {
+                        const errorResponse = { msg: '配置重置失败，失败原因：' + err.message, error: err.message };
+                        return new Response(JSON.stringify(errorResponse, null, 2), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                    }
+                } else if (request.method === 'POST') {// 处理 KV 操作（POST 请求）
+                    if (访问路径 === 'admin/config.json') { // 保存config.json配置
+                        try {
+                            const newConfig = await request.json();
+                            // 验证配置完整性
+                            if (!newConfig.UUID || !newConfig.HOST) return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
 
--->
-<html>
-  <head>
-    <title>Unicorn! &middot; GitHub</title>
-    <style type="text/css" media="screen">
-      body {
-        background-color: #f1f1f1;
-        margin: 0;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-      }
+                            // 保存到 KV
+                            await env.KV.put('config.json', JSON.stringify(newConfig, null, 2));
+                            ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
+                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        } catch (error) {
+                            console.error('保存配置失败:', error);
+                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        }
+                    } else if (访问路径 === 'admin/cf.json') { // 保存cf.json配置
+                        try {
+                            const newConfig = await request.json();
+                            const CF_JSON = { Email: null, GlobalAPIKey: null, AccountID: null, APIToken: null };
+                            if (!newConfig.init || newConfig.init !== true) {
+                                if (newConfig.Email && newConfig.GlobalAPIKey) {
+                                    CF_JSON.Email = newConfig.Email;
+                                    CF_JSON.GlobalAPIKey = newConfig.GlobalAPIKey;
+                                    CF_JSON.AccountID = null;
+                                    CF_JSON.APIToken = null;
+                                } else if (newConfig.AccountID && newConfig.APIToken) {
+                                    CF_JSON.Email = null;
+                                    CF_JSON.GlobalAPIKey = null;
+                                    CF_JSON.AccountID = newConfig.AccountID;
+                                    CF_JSON.APIToken = newConfig.APIToken;
+                                } else {
+                                    return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                                }
+                            }
 
-      .container { margin: 50px auto 40px auto; width: 600px; text-align: center; }
+                            // 保存到 KV
+                            await env.KV.put('cf.json', JSON.stringify(CF_JSON, null, 2));
+                            ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
+                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        } catch (error) {
+                            console.error('保存配置失败:', error);
+                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        }
+                    } else if (访问路径 === 'admin/tg.json') { // 保存tg.json配置
+                        try {
+                            const newConfig = await request.json();
+                            if (newConfig.init && newConfig.init === true) {
+                                const TG_JSON = { BotToken: null, ChatID: null };
+                                await env.KV.put('tg.json', JSON.stringify(TG_JSON, null, 2));
+                            } else {
+                                if (!newConfig.BotToken || !newConfig.ChatID) return new Response(JSON.stringify({ error: '配置不完整' }), { status: 400, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                                await env.KV.put('tg.json', JSON.stringify(newConfig, null, 2));
+                            }
+                            ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Config', config_JSON));
+                            return new Response(JSON.stringify({ success: true, message: '配置已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        } catch (error) {
+                            console.error('保存配置失败:', error);
+                            return new Response(JSON.stringify({ error: '保存配置失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        }
+                    } else if (区分大小写访问路径 === 'admin/ADD.txt') { // 保存自定义优选IP
+                        try {
+                            const customIPs = await request.text();
+                            await env.KV.put('ADD.txt', customIPs);// 保存到 KV
+                            ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Save_Custom_IPs', config_JSON));
+                            return new Response(JSON.stringify({ success: true, message: '自定义IP已保存' }), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        } catch (error) {
+                            console.error('保存自定义IP失败:', error);
+                            return new Response(JSON.stringify({ error: '保存自定义IP失败: ' + error.message }), { status: 500, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                        }
+                    } else return new Response(JSON.stringify({ error: '不支持的POST请求路径' }), { status: 404, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                } else if (访问路径 === 'admin/config.json') {// 处理 admin/config.json 请求，返回JSON
+                    return new Response(JSON.stringify(config_JSON, null, 2), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                } else if (区分大小写访问路径 === 'admin/ADD.txt') {// 处理 admin/ADD.txt 请求，返回本地优选IP
+                    let 本地优选IP = await env.KV.get('ADD.txt') || 'null';
+                    if (本地优选IP == 'null') 本地优选IP = (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[1];
+                    return new Response(本地优选IP, { status: 200, headers: { 'Content-Type': 'text/plain;charset=utf-8', 'asn': request.cf.asn } });
+                } else if (访问路径 === 'admin/cf.json') {// CF配置文件
+                    return new Response(JSON.stringify(request.cf, null, 2), { status: 200, headers: { 'Content-Type': 'application/json;charset=utf-8' } });
+                }
 
-      a { color: #4183c4; text-decoration: none; }
-      a:hover { text-decoration: underline; }
+                ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Admin_Login', config_JSON));
+                return fetch(Pages静态页面 + '/admin');
+            } else if (访问路径 === 'logout') {//清除cookie并跳转到登录页面
+                const 响应 = new Response('重定向中...', { status: 302, headers: { 'Location': '/login' } });
+                响应.headers.set('Set-Cookie', 'auth=; Path=/; Max-Age=0; HttpOnly');
+                return 响应;
+            } else if (访问路径 === 'sub') {//处理订阅请求
+                const 订阅TOKEN = await MD5MD5(host + userID);
+                if (url.searchParams.get('token') === 订阅TOKEN) {
+                    config_JSON = await 读取config_JSON(env, host, userID, env.PATH);
+                    ctx.waitUntil(请求日志记录(env, request, 访问IP, 'Get_SUB', config_JSON));
+                    const ua = UA.toLowerCase();
+                    const expire = 4102329600;//2099-12-31 到期时间
+                    const now = Date.now();
+                    const today = new Date(now);
+                    today.setHours(0, 0, 0, 0);
+                    const UD = Math.floor(((now - today.getTime()) / 86400000) * 24 * 1099511627776 / 2);
+                    let pagesSum = UD, workersSum = UD, total = 24 * 1099511627776;
+                    if (config_JSON.CF.Usage.success) {
+                        pagesSum = config_JSON.CF.Usage.pages;
+                        workersSum = config_JSON.CF.Usage.workers;
+                        total = 1024 * 100;
+                    }
+                    const responseHeaders = {
+                        "content-type": "text/plain; charset=utf-8",
+                        "Profile-Update-Interval": config_JSON.优选订阅生成.SUBUpdateTime,
+                        "Profile-web-page-url": url.protocol + '//' + url.host + '/admin',
+                        "Subscription-Userinfo": `upload=${pagesSum}; download=${workersSum}; total=${total}; expire=${expire}`,
+                        "Cache-Control": "no-store",
+                    };
+                    const isSubConverterRequest = request.headers.has('b64') || request.headers.has('base64') || request.headers.get('subconverter-request') || request.headers.get('subconverter-version') || ua.includes('subconverter') || ua.includes(('CF-Workers-SUB').toLowerCase());
+                    const 订阅类型 = isSubConverterRequest
+                        ? 'mixed'
+                        : url.searchParams.has('target')
+                            ? url.searchParams.get('target')
+                            : url.searchParams.has('clash') || ua.includes('clash') || ua.includes('meta') || ua.includes('mihomo')
+                                ? 'clash'
+                                : url.searchParams.has('sb') || url.searchParams.has('singbox') || ua.includes('singbox') || ua.includes('sing-box')
+                                    ? 'singbox'
+                                    : url.searchParams.has('surge') || ua.includes('surge')
+                                        ? 'surge&ver=4'
+                                        : 'mixed';
 
-      h1 { letter-spacing: -1px; line-height: 60px; font-size: 60px; font-weight: 100; margin: 0px; text-shadow: 0 1px 0 #fff; }
-      p { color: rgba(0, 0, 0, 0.5); margin: 10px 0 10px; font-size: 18px; font-weight: 200; line-height: 1.6em;}
+                    if (!ua.includes('mozilla')) responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
+                    const 协议类型 = (url.searchParams.has('surge') || ua.includes('surge')) ? 'tro' + 'jan' : config_JSON.协议类型;
+                    let 订阅内容 = '';
+                    if (订阅类型 === 'mixed') {
+                        const 节点路径 = config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH;
+                        const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
+                        let 完整优选IP = [], 其他节点LINK = '';
 
-      ul { list-style: none; margin: 25px 0; padding: 0; }
-      li { display: table-cell; font-weight: bold; width: 1%; }
+                        if (!url.searchParams.has('sub') && config_JSON.优选订阅生成.local) { // 本地生成订阅
+                            const 完整优选列表 = config_JSON.优选订阅生成.本地IP库.随机IP ? (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[0] : await env.KV.get('ADD.txt') ? await 整理成数组(await env.KV.get('ADD.txt')) : (await 生成随机IP(request, config_JSON.优选订阅生成.本地IP库.随机数量, config_JSON.优选订阅生成.本地IP库.指定端口))[0];
+                            const 优选API = [], 优选IP = [], 其他节点 = [];
+                            for (const 元素 of 完整优选列表) {
+                                if (元素.toLowerCase().startsWith('https://')) 优选API.push(元素);
+                                else if (元素.toLowerCase().includes('://')) 其他节点.push(元素);
+                                else 优选IP.push(元素);
+                            }
+                            其他节点LINK = 其他节点.join('\n') + '\n';
+                            const 优选API的IP = await 请求优选API(优选API);
+                            完整优选IP = [...new Set(优选IP.concat(优选API的IP))];
+                        } else { // 优选订阅生成器
+                            let 优选订阅生成器HOST = url.searchParams.get('sub') || config_JSON.优选订阅生成.SUB;
+                            优选订阅生成器HOST = 优选订阅生成器HOST && !/^https?:\/\//i.test(优选订阅生成器HOST) ? `https://${优选订阅生成器HOST}` : 优选订阅生成器HOST;
+                            const 优选订阅生成器URL = `${优选订阅生成器HOST}/sub?host=example.com&uuid=00000000-0000-4000-8000-000000000000`;
+                            try {
+                                const response = await fetch(优选订阅生成器URL, { headers: { 'User-Agent': 'v2rayN/edge' + 'tunnel (https://github.com/cmliu/edge' + 'tunnel)' } });
+                                if (!response.ok) return new Response('优选订阅生成器异常：' + response.statusText, { status: response.status });
+                                const 优选订阅生成器返回订阅内容 = atob(await response.text());
+                                const 订阅行列表 = 优选订阅生成器返回订阅内容.includes('\r\n') ? 优选订阅生成器返回订阅内容.split('\r\n') : 优选订阅生成器返回订阅内容.split('\n');
+                                for (const 行内容 of 订阅行列表) {
+                                    if (!行内容.trim()) continue; // 跳过空行
+                                    if (行内容.includes('00000000-0000-4000-8000-000000000000') && 行内容.includes('example.com')) { // 这是优选IP行，提取 域名:端口#备注
+                                        const 地址匹配 = 行内容.match(/:\/\/[^@]+@([^?]+)/);
+                                        if (地址匹配) {
+                                            let 地址端口 = 地址匹配[1], 备注 = ''; // 域名:端口 或 IP:端口
+                                            const 备注匹配 = 行内容.match(/#(.+)$/);
+                                            if (备注匹配) 备注 = '#' + decodeURIComponent(备注匹配[1]);
+                                            完整优选IP.push(地址端口 + 备注);
+                                        }
+                                    } else 其他节点LINK += 行内容 + '\n';
+                                }
+                            } catch (error) {
+                                return new Response('优选订阅生成器异常：' + error.message, { status: 403 });
+                            }
+                        }
 
-      .logo { display: inline-block; margin-top: 35px; }
-      .logo-img-2x { display: none; }
-      @media
-      only screen and (-webkit-min-device-pixel-ratio: 2),
-      only screen and (   min--moz-device-pixel-ratio: 2),
-      only screen and (     -o-min-device-pixel-ratio: 2/1),
-      only screen and (        min-device-pixel-ratio: 2),
-      only screen and (                min-resolution: 192dpi),
-      only screen and (                min-resolution: 2dppx) {
-        .logo-img-1x { display: none; }
-        .logo-img-2x { display: inline-block; }
-      }
+                        订阅内容 = 完整优选IP.map(原始地址 => {
+                            // 统一正则: 匹配 域名/IPv4/IPv6地址 + 可选端口 + 可选备注
+                            // 示例: 
+                            //   - 域名: hj.xmm1993.top:2096#备注 或 example.com
+                            //   - IPv4: 166.0.188.128:443#Los Angeles 或 166.0.188.128
+                            //   - IPv6: [2606:4700::]:443#CMCC 或 [2606:4700::]
+                            const regex = /^(\[[\da-fA-F:]+\]|[\d.]+|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*)(?::(\d+))?(?:#(.+))?$/;
+                            const match = 原始地址.match(regex);
 
-      #suggestions {
-        margin-top: 35px;
-        color: #ccc;
-      }
-      #suggestions a {
-        color: #666666;
-        font-weight: 200;
-        font-size: 14px;
-        margin: 0 10px;
-      }
+                            let 节点地址, 节点端口 = "443", 节点备注;
 
-    </style>
-  </head>
-  <body>
+                            if (match) {
+                                节点地址 = match[1];  // IP地址或域名(可能带方括号)
+                                节点端口 = match[2] || "443";  // 端口,默认443
+                                节点备注 = match[3] || 节点地址;  // 备注,默认为地址本身
+                            } else {
+                                // 不规范的格式，跳过处理返回null
+                                console.warn(`[订阅内容] 不规范的IP格式已忽略: ${原始地址}`);
+                                return null;
+                            }
 
-    <div class="container">
-      <p>
-        <img width="200" src="data:image/png;base64,
-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">
-      </p>
+                            return `${协议类型}://00000000-0000-4000-8000-000000000000@${节点地址}:${节点端口}?security=tls&type=${config_JSON.传输协议}&host=example.com&sni=example.com&path=${encodeURIComponent(config_JSON.随机路径 ? 随机路径() + 节点路径 : 节点路径) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(节点备注)}`;
+                        }).filter(item => item !== null).join('\n');
+                    } else { // 订阅转换
+                        const 订阅转换URL = `${config_JSON.订阅转换配置.SUBAPI}/sub?target=${订阅类型}&url=${encodeURIComponent(url.protocol + '//' + url.host + '/sub?target=mixed&token=' + 订阅TOKEN + (url.searchParams.has('sub') && url.searchParams.get('sub') != '' ? `&sub=${url.searchParams.get('sub')}` : ''))}&config=${encodeURIComponent(config_JSON.订阅转换配置.SUBCONFIG)}&emoji=${config_JSON.订阅转换配置.SUBEMOJI}&scv=${config_JSON.跳过证书验证}`;
+                        try {
+                            const response = await fetch(订阅转换URL, { headers: { 'User-Agent': 'Subconverter for ' + 订阅类型 + ' edge' + 'tunnel(https://github.com/cmliu/edge' + 'tunnel)' } });
+                            if (response.ok) {
+                                订阅内容 = await response.text();
+                                if (url.searchParams.has('surge') || ua.includes('surge')) 订阅内容 = surge(订阅内容, url.protocol + '//' + url.host + '/sub?token=' + 订阅TOKEN + '&surge', config_JSON);
+                            } else return new Response('订阅转换后端异常：' + response.statusText, { status: response.status });
+                        } catch (error) {
+                            return new Response('订阅转换后端异常：' + error.message, { status: 403 });
+                        }
+                    }
 
-      <p><strong>No server is currently available to service your request.</strong></p>
-      <p>Sorry about that. Please try refreshing and contact us if the problem persists.</p>
-      <div id="suggestions">
-        <a href="https://github.com/contact">Contact Support</a> &mdash;
-        <a href="https://www.githubstatus.com">GitHub Status</a> &mdash;
-        <a href="https://twitter.com/githubstatus">@githubstatus</a>
-      </div>
+                    if (!ua.includes('subconverter')) 订阅内容 = 批量替换域名(订阅内容.replace(/00000000-0000-4000-8000-000000000000/g, config_JSON.UUID), config_JSON.HOSTS)
 
-      <a href="/" class="logo logo-img-1x">
-        <img width="32" height="32" title="" alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyRpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMy1jMDExIDY2LjE0NTY2MSwgMjAxMi8wMi8wNi0xNDo1NjoyNyAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNiAoTWFjaW50b3NoKSIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDpFMTZCRDY3REIzRjAxMUUyQUQzREIxQzRENUFFNUM5NiIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDpFMTZCRDY3RUIzRjAxMUUyQUQzREIxQzRENUFFNUM5NiI+IDx4bXBNTTpEZXJpdmVkRnJvbSBzdFJlZjppbnN0YW5jZUlEPSJ4bXAuaWlkOkUxNkJENjdCQjNGMDExRTJBRDNEQjFDNEQ1QUU1Qzk2IiBzdFJlZjpkb2N1bWVudElEPSJ4bXAuZGlkOkUxNkJENjdDQjNGMDExRTJBRDNEQjFDNEQ1QUU1Qzk2Ii8+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+SM9MCAAAA+5JREFUeNrEV11Ik1EY3s4+ddOp29Q5b0opCgKFsoKoi5Kg6CIhuwi6zLJLoYLopq4qsKKgi4i6CYIoU/q5iDAKs6syoS76IRWtyJ+p7cdt7sf1PGOD+e0c3dygAx/67ZzzPM95/877GYdHRg3ZjMXFxepQKNS6sLCwJxqNNuFpiMfjVs4ZjUa/pmmjeD6VlJS8NpvNT4QQ7mxwjSsJiEQim/1+/9lgMHgIr5ohuxG1WCw9Vqv1clFR0dCqBODElV6v90ogEDjGdYbVjXhpaendioqK07CIR7ZAqE49PT09BPL2PMgTByQGsYiZlQD4uMXtdr+JxWINhgINYhGT2MsKgMrm2dnZXgRXhaHAg5jEJodUAHxux4LudHJE9RdEdA+i3Juz7bGHe4mhE9FNrgwBCLirMFV9Okh5eflFh8PR5nK5nDabrR2BNJlKO0T35+Li4n4+/J+/JQCxhmu5h3uJoXNHPbmWZAHMshWB8l5/ipqammaAf0zPDDx1ONV3vurdidqwAQL+pEc8sLcAe1CCvQ3YHxIW8Pl85xSWNC1hADDIv0rIE/o4J0k3kww4xSlwIhcq3EFFOm7KN/hUGOQkt0CFa5WpNJlMvxBEz/IVQAxg/ZRZl9wiHA63yDYieM7DnLP5CiAGsC7I5sgtYKJGWe2A8seFqgFJrJjEPY1Cn3pJ8/9W1e5VWsFDTEmFrBcoDhZJEQkXuhICMyKpjhahqN21hRYATKfUOlDmkygrR4o4C0VOLGJKrOITKB4jijzdXygBKixyC5TDQdnk/Pz8qRw6oOWGlsTKGOQW6OH6FBWsyePxdOXLTgxiyebILZCjz+GLgMIKnXNzc49YMlcRdHXcSwxFVgTInQhC9G33UhNoJLuqq6t345p9y3eUy8OTk5PjAHuI9uo4b07FBaOhsu0A4Unc+T1TU1Nj3KsSSE5yJ65jqF2DDd8QqWYmAZrIM2VlZTdnZmb6AbpdV9V6ec9znf5Q7HjYumdRE0JOp3MjitO4SFa+cZz8Umqe3TCbSLvdfkR/kWDdNQl5InuTcysOcpFT35ZrbBxx4p3JAHlZVVW1D/634VRt+FvLBgK/v5LV9WS+10xMTEwtRw7XvqOL+e2Q8V3AYIOIAXQ26/heWVnZCVfcyKHg2CBgTpmPmjYM8l24GyaUHyaIh7XwfR9ErE8qHoDfn2LTNAVC0HX6MFcBIP8Bi+6F6cdW/DICkANRfx99fEYFQ7Nph5i/uQiA214gno7K+guhaiKg9gC62+M8eR7XsBsYJ4ilam60Fb7r7uAj8wFyuwM1oIOWgfmDy6RXEEQzJMPe23DXrVS7rtyD3Df8z/FPgAEAzWU5Ku59ZAUAAAAASUVORK5CYII=" />
-      </a>
+                    if (!ua.includes('mozilla') && 订阅类型 === 'mixed') 订阅内容 = btoa(订阅内容);
 
-      <a href="/" class="logo logo-img-2x">
-        <img width="32" height="32" title="" alt="" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyRpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMy1jMDExIDY2LjE0NTY2MSwgMjAxMi8wMi8wNi0xNDo1NjoyNyAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNiAoTWFjaW50b3NoKSIgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDpEQUM1QkUxRUI0MUMxMUUyQUQzREIxQzRENUFFNUM5NiIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDpEQUM1QkUxRkI0MUMxMUUyQUQzREIxQzRENUFFNUM5NiI+IDx4bXBNTTpEZXJpdmVkRnJvbSBzdFJlZjppbnN0YW5jZUlEPSJ4bXAuaWlkOkUxNkJENjdGQjNGMDExRTJBRDNEQjFDNEQ1QUU1Qzk2IiBzdFJlZjpkb2N1bWVudElEPSJ4bXAuZGlkOkUxNkJENjgwQjNGMDExRTJBRDNEQjFDNEQ1QUU1Qzk2Ii8+IDwvcmRmOkRlc2NyaXB0aW9uPiA8L3JkZjpSREY+IDwveDp4bXBtZXRhPiA8P3hwYWNrZXQgZW5kPSJyIj8+hfPRaQAAB6lJREFUeNrsW2mM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" />
-      </a>
-    </div>
-  </body>
-</html>
+                    if (订阅类型 === 'singbox') {
+                        订阅内容 = JSON.stringify(JSON.parse(订阅内容), null, 2);
+                        responseHeaders["content-type"] = 'application/json; charset=utf-8';
+                    } else if (订阅类型 === 'clash') {
+                        responseHeaders["content-type"] = 'application/x-yaml; charset=utf-8';
+                    }
+                    return new Response(订阅内容, { status: 200, headers: responseHeaders });
+                }
+                return new Response('无效的订阅TOKEN', { status: 403 });
+            } else if (访问路径 === 'locations') return fetch(new Request('https://speed.cloudflare.com/locations', { headers: { 'Referer': 'https://speed.cloudflare.com/' } }));
+        } else if (管理员密码) {// ws代理
+            await 反代参数获取(request);
+            return await 处理WS请求(request, userID);
+        }
+
+        let 伪装页URL = env.URL || 'nginx';
+        if (伪装页URL && 伪装页URL !== 'nginx' && 伪装页URL !== '1101') {
+            伪装页URL = 伪装页URL.trim().replace(/\/$/, '');
+            if (!伪装页URL.match(/^https?:\/\//i)) 伪装页URL = 'https://' + 伪装页URL;
+            if (伪装页URL.toLowerCase().startsWith('http://')) 伪装页URL = 'https://' + 伪装页URL.substring(7);
+            try { const u = new URL(伪装页URL); 伪装页URL = u.protocol + '//' + u.host; } catch (e) { 伪装页URL = 'nginx'; }
+        }
+        if (伪装页URL === '1101') return new Response(await html1101(url.host, 访问IP), { status: 200, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+        try {
+            const 反代URL = new URL(伪装页URL), 新请求头 = new Headers(request.headers);
+            新请求头.set('Host', 反代URL.host);
+            if (新请求头.has('Referer')) { const u = new URL(新请求头.get('Referer')); 新请求头.set('Referer', 反代URL.protocol + '//' + 反代URL.host + u.pathname + u.search); }
+            if (新请求头.has('Origin')) 新请求头.set('Origin', 反代URL.protocol + '//' + 反代URL.host);
+            if (!新请求头.has('User-Agent') && UA && UA !== 'null') 新请求头.set('User-Agent', UA);
+            return fetch(new Request(反代URL.protocol + 反代URL.host + url.pathname + url.search, { method: request.method, headers: 新请求头, body: request.body, cf: request.cf }));
+        } catch (error) { }
+        return new Response(await nginx(), { status: 200, headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+    }
+};
+///////////////////////////////////////////////////////////////////////WS传输数据///////////////////////////////////////////////
+async function 处理WS请求(request, yourUUID) {
+    const wssPair = new WebSocketPair();
+    const [clientSock, serverSock] = Object.values(wssPair);
+    serverSock.accept();
+    let remoteConnWrapper = { socket: null };
+    let isDnsQuery = false;
+    const earlyData = request.headers.get('sec-websocket-protocol') || '';
+    const readable = makeReadableStr(serverSock, earlyData);
+    let 判断是否是木马 = null;
+    readable.pipeTo(new WritableStream({
+        async write(chunk) {
+            if (isDnsQuery) return await forwardataudp(chunk, serverSock, null);
+            if (remoteConnWrapper.socket) {
+                const writer = remoteConnWrapper.socket.writable.getWriter();
+                await writer.write(chunk);
+                writer.releaseLock();
+                return;
+            }
+
+            if (判断是否是木马 === null) {
+                const bytes = new Uint8Array(chunk);
+                判断是否是木马 = bytes.byteLength >= 58 && bytes[56] === 0x0d && bytes[57] === 0x0a;
+            }
+
+            if (remoteConnWrapper.socket) {
+                const writer = remoteConnWrapper.socket.writable.getWriter();
+                await writer.write(chunk);
+                writer.releaseLock();
+                return;
+            }
+
+            if (判断是否是木马) {
+                const { port, hostname, rawClientData } = 解析木马请求(chunk, yourUUID);
+                if (isSpeedTestSite(hostname)) throw new Error('Speedtest site is blocked');
+                await forwardataTCP(hostname, port, rawClientData, serverSock, null, remoteConnWrapper);
+            } else {
+                const { port, hostname, rawIndex, version, isUDP } = 解析魏烈思请求(chunk, yourUUID);
+                if (isSpeedTestSite(hostname)) throw new Error('Speedtest site is blocked');
+                if (isUDP) {
+                    if (port === 53) isDnsQuery = true;
+                    else throw new Error('UDP is not supported');
+                }
+                const respHeader = new Uint8Array([version[0], 0]);
+                const rawData = chunk.slice(rawIndex);
+                if (isDnsQuery) return forwardataudp(rawData, serverSock, respHeader);
+                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper);
+            }
+        },
+    })).catch((err) => {
+        // console.error('Readable pipe error:', err);
+    });
+
+    return new Response(null, { status: 101, webSocket: clientSock });
+}
+
+function 解析木马请求(buffer, passwordPlainText) {
+    const sha224Password = sha224(passwordPlainText);
+    if (buffer.byteLength < 56) return { hasError: true, message: "invalid data" };
+    let crLfIndex = 56;
+    if (new Uint8Array(buffer.slice(56, 57))[0] !== 0x0d || new Uint8Array(buffer.slice(57, 58))[0] !== 0x0a) return { hasError: true, message: "invalid header format" };
+    const password = new TextDecoder().decode(buffer.slice(0, crLfIndex));
+    if (password !== sha224Password) return { hasError: true, message: "invalid password" };
+
+    const socks5DataBuffer = buffer.slice(crLfIndex + 2);
+    if (socks5DataBuffer.byteLength < 6) return { hasError: true, message: "invalid S5 request data" };
+
+    const view = new DataView(socks5DataBuffer);
+    const cmd = view.getUint8(0);
+    if (cmd !== 1) return { hasError: true, message: "unsupported command, only TCP is allowed" };
+
+    const atype = view.getUint8(1);
+    let addressLength = 0;
+    let addressIndex = 2;
+    let address = "";
+    switch (atype) {
+        case 1: // IPv4
+            addressLength = 4;
+            address = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength)).join(".");
+            break;
+        case 3: // Domain
+            addressLength = new Uint8Array(socks5DataBuffer.slice(addressIndex, addressIndex + 1))[0];
+            addressIndex += 1;
+            address = new TextDecoder().decode(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
+            break;
+        case 4: // IPv6
+            addressLength = 16;
+            const dataView = new DataView(socks5DataBuffer.slice(addressIndex, addressIndex + addressLength));
+            const ipv6 = [];
+            for (let i = 0; i < 8; i++) {
+                ipv6.push(dataView.getUint16(i * 2).toString(16));
+            }
+            address = ipv6.join(":");
+            break;
+        default:
+            return { hasError: true, message: `invalid addressType is ${atype}` };
+    }
+
+    if (!address) {
+        return { hasError: true, message: `address is empty, addressType is ${atype}` };
+    }
+
+    const portIndex = addressIndex + addressLength;
+    const portBuffer = socks5DataBuffer.slice(portIndex, portIndex + 2);
+    const portRemote = new DataView(portBuffer).getUint16(0);
+
+    return {
+        hasError: false,
+        addressType: atype,
+        port: portRemote,
+        hostname: address,
+        rawClientData: socks5DataBuffer.slice(portIndex + 4)
+    };
+}
+
+function 解析魏烈思请求(chunk, token) {
+    if (chunk.byteLength < 24) return { hasError: true, message: 'Invalid data' };
+    const version = new Uint8Array(chunk.slice(0, 1));
+    if (formatIdentifier(new Uint8Array(chunk.slice(1, 17))) !== token) return { hasError: true, message: 'Invalid uuid' };
+    const optLen = new Uint8Array(chunk.slice(17, 18))[0];
+    const cmd = new Uint8Array(chunk.slice(18 + optLen, 19 + optLen))[0];
+    let isUDP = false;
+    if (cmd === 1) { } else if (cmd === 2) { isUDP = true; } else { return { hasError: true, message: 'Invalid command' }; }
+    const portIdx = 19 + optLen;
+    const port = new DataView(chunk.slice(portIdx, portIdx + 2)).getUint16(0);
+    let addrIdx = portIdx + 2, addrLen = 0, addrValIdx = addrIdx + 1, hostname = '';
+    const addressType = new Uint8Array(chunk.slice(addrIdx, addrValIdx))[0];
+    switch (addressType) {
+        case 1:
+            addrLen = 4;
+            hostname = new Uint8Array(chunk.slice(addrValIdx, addrValIdx + addrLen)).join('.');
+            break;
+        case 2:
+            addrLen = new Uint8Array(chunk.slice(addrValIdx, addrValIdx + 1))[0];
+            addrValIdx += 1;
+            hostname = new TextDecoder().decode(chunk.slice(addrValIdx, addrValIdx + addrLen));
+            break;
+        case 3:
+            addrLen = 16;
+            const ipv6 = [];
+            const ipv6View = new DataView(chunk.slice(addrValIdx, addrValIdx + addrLen));
+            for (let i = 0; i < 8; i++) ipv6.push(ipv6View.getUint16(i * 2).toString(16));
+            hostname = ipv6.join(':');
+            break;
+        default:
+            return { hasError: true, message: `Invalid address type: ${addressType}` };
+    }
+    if (!hostname) return { hasError: true, message: `Invalid address: ${addressType}` };
+    return { hasError: false, addressType, port, hostname, isUDP, rawIndex: addrValIdx + addrLen, version };
+}
+async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper) {
+    console.log(JSON.stringify({ configJSON: { 目标地址: host, 目标端口: portNum, 反代IP: 反代IP, 代理类型: 启用SOCKS5反代, 全局代理: 启用SOCKS5全局反代, 代理账号: 我的SOCKS5账号 } }));
+    async function connectDirect(address, port, data) {
+        const remoteSock = connect({ hostname: address, port: port });
+        const writer = remoteSock.writable.getWriter();
+        await writer.write(data);
+        writer.releaseLock();
+        return remoteSock;
+    }
+    async function connecttoPry() {
+        let newSocket;
+        if (启用SOCKS5反代 === 'socks5') {
+            newSocket = await socks5Connect(host, portNum, rawData);
+        } else if (启用SOCKS5反代 === 'http' || 启用SOCKS5反代 === 'https') {
+            newSocket = await httpConnect(host, portNum, rawData);
+        } else {
+            try {
+                const [反代IP地址, 反代IP端口] = await 解析地址端口(反代IP);
+                newSocket = await connectDirect(反代IP地址, 反代IP端口, rawData);
+            } catch { newSocket = await connectDirect(atob('UFJPWFlJUC50cDEuMDkwMjI3Lnh5eg=='), 1, rawData) }
+        }
+        remoteConnWrapper.socket = newSocket;
+        newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
+        connectStreams(newSocket, ws, respHeader, null);
+    }
+
+    const 验证SOCKS5白名单 = (addr) => SOCKS5白名单.some(p => new RegExp(`^${p.replace(/\*/g, '.*')}$`, 'i').test(addr));
+    if (启用SOCKS5反代 && (启用SOCKS5全局反代 || 验证SOCKS5白名单(host))) {
+        try {
+            await connecttoPry();
+        } catch (err) {
+            throw err;
+        }
+    } else {
+        try {
+            const initialSocket = await connectDirect(host, portNum, rawData);
+            remoteConnWrapper.socket = initialSocket;
+            connectStreams(initialSocket, ws, respHeader, connecttoPry);
+        } catch (err) {
+            await connecttoPry();
+        }
+    }
+}
+
+async function forwardataudp(udpChunk, webSocket, respHeader) {
+    try {
+        const tcpSocket = connect({ hostname: '8.8.4.4', port: 53 });
+        let vlessHeader = respHeader;
+        const writer = tcpSocket.writable.getWriter();
+        await writer.write(udpChunk);
+        writer.releaseLock();
+        await tcpSocket.readable.pipeTo(new WritableStream({
+            async write(chunk) {
+                if (webSocket.readyState === WebSocket.OPEN) {
+                    if (vlessHeader) {
+                        const response = new Uint8Array(vlessHeader.length + chunk.byteLength);
+                        response.set(vlessHeader, 0);
+                        response.set(chunk, vlessHeader.length);
+                        webSocket.send(response.buffer);
+                        vlessHeader = null;
+                    } else {
+                        webSocket.send(chunk);
+                    }
+                }
+            },
+        }));
+    } catch (error) {
+        // console.error('UDP forward error:', error);
+    }
+}
+
+function closeSocketQuietly(socket) {
+    try {
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CLOSING) {
+            socket.close();
+        }
+    } catch (error) { }
+}
+
+function formatIdentifier(arr, offset = 0) {
+    const hex = [...arr.slice(offset, offset + 16)].map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}`;
+}
+async function connectStreams(remoteSocket, webSocket, headerData, retryFunc) {
+    let header = headerData, hasData = false;
+    await remoteSocket.readable.pipeTo(
+        new WritableStream({
+            async write(chunk, controller) {
+                hasData = true;
+                if (webSocket.readyState !== WebSocket.OPEN) controller.error('ws.readyState is not open');
+                if (header) {
+                    const response = new Uint8Array(header.length + chunk.byteLength);
+                    response.set(header, 0);
+                    response.set(chunk, header.length);
+                    webSocket.send(response.buffer);
+                    header = null;
+                } else {
+                    webSocket.send(chunk);
+                }
+            },
+            abort() { },
+        })
+    ).catch((err) => {
+        closeSocketQuietly(webSocket);
+    });
+    if (!hasData && retryFunc) {
+        await retryFunc();
+    }
+}
+
+function makeReadableStr(socket, earlyDataHeader) {
+    let cancelled = false;
+    return new ReadableStream({
+        start(controller) {
+            socket.addEventListener('message', (event) => {
+                if (!cancelled) controller.enqueue(event.data);
+            });
+            socket.addEventListener('close', () => {
+                if (!cancelled) {
+                    closeSocketQuietly(socket);
+                    controller.close();
+                }
+            });
+            socket.addEventListener('error', (err) => controller.error(err));
+            const { earlyData, error } = base64ToArray(earlyDataHeader);
+            if (error) controller.error(error);
+            else if (earlyData) controller.enqueue(earlyData);
+        },
+        cancel() {
+            cancelled = true;
+            closeSocketQuietly(socket);
+        }
+    });
+}
+
+function isSpeedTestSite(hostname) {
+    const speedTestDomains = [atob('c3BlZWQuY2xvdWRmbGFyZS5jb20=')];
+    if (speedTestDomains.includes(hostname)) {
+        return true;
+    }
+
+    for (const domain of speedTestDomains) {
+        if (hostname.endsWith('.' + domain) || hostname === domain) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function base64ToArray(b64Str) {
+    if (!b64Str) return { error: null };
+    try {
+        const binaryString = atob(b64Str.replace(/-/g, '+').replace(/_/g, '/'));
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return { earlyData: bytes.buffer, error: null };
+    } catch (error) {
+        return { error };
+    }
+}
+////////////////////////////////SOCKS5/HTTP函数///////////////////////////////////////////////
+async function socks5Connect(targetHost, targetPort, initialData) {
+    const { username, password, hostname, port } = parsedSocks5Address;
+    const socket = connect({ hostname, port }), writer = socket.writable.getWriter(), reader = socket.readable.getReader();
+    try {
+        const authMethods = username && password ? new Uint8Array([0x05, 0x02, 0x00, 0x02]) : new Uint8Array([0x05, 0x01, 0x00]);
+        await writer.write(authMethods);
+        let response = await reader.read();
+        if (response.done || response.value.byteLength < 2) throw new Error('S5 method selection failed');
+
+        const selectedMethod = new Uint8Array(response.value)[1];
+        if (selectedMethod === 0x02) {
+            if (!username || !password) throw new Error('S5 requires authentication');
+            const userBytes = new TextEncoder().encode(username), passBytes = new TextEncoder().encode(password);
+            const authPacket = new Uint8Array([0x01, userBytes.length, ...userBytes, passBytes.length, ...passBytes]);
+            await writer.write(authPacket);
+            response = await reader.read();
+            if (response.done || new Uint8Array(response.value)[1] !== 0x00) throw new Error('S5 authentication failed');
+        } else if (selectedMethod !== 0x00) throw new Error(`S5 unsupported auth method: ${selectedMethod}`);
+
+        const hostBytes = new TextEncoder().encode(targetHost);
+        const connectPacket = new Uint8Array([0x05, 0x01, 0x00, 0x03, hostBytes.length, ...hostBytes, targetPort >> 8, targetPort & 0xff]);
+        await writer.write(connectPacket);
+        response = await reader.read();
+        if (response.done || new Uint8Array(response.value)[1] !== 0x00) throw new Error('S5 connection failed');
+
+        await writer.write(initialData);
+        writer.releaseLock(); reader.releaseLock();
+        return socket;
+    } catch (error) {
+        try { writer.releaseLock(); } catch (e) { }
+        try { reader.releaseLock(); } catch (e) { }
+        try { socket.close(); } catch (e) { }
+        throw error;
+    }
+}
+
+async function httpConnect(targetHost, targetPort, initialData) {
+    const { username, password, hostname, port } = parsedSocks5Address;
+    const socket = connect({ hostname, port }), writer = socket.writable.getWriter(), reader = socket.readable.getReader();
+    try {
+        const auth = username && password ? `Proxy-Authorization: Basic ${btoa(`${username}:${password}`)}\r\n` : '';
+        const request = `CONNECT ${targetHost}:${targetPort} HTTP/1.1\r\nHost: ${targetHost}:${targetPort}\r\n${auth}User-Agent: Mozilla/5.0\r\nConnection: keep-alive\r\n\r\n`;
+        await writer.write(new TextEncoder().encode(request));
+
+        let responseBuffer = new Uint8Array(0), headerEndIndex = -1, bytesRead = 0;
+        while (headerEndIndex === -1 && bytesRead < 8192) {
+            const { done, value } = await reader.read();
+            if (done) throw new Error('Connection closed before receiving HTTP response');
+            responseBuffer = new Uint8Array([...responseBuffer, ...value]);
+            bytesRead = responseBuffer.length;
+            const crlfcrlf = responseBuffer.findIndex((_, i) => i < responseBuffer.length - 3 && responseBuffer[i] === 0x0d && responseBuffer[i + 1] === 0x0a && responseBuffer[i + 2] === 0x0d && responseBuffer[i + 3] === 0x0a);
+            if (crlfcrlf !== -1) headerEndIndex = crlfcrlf + 4;
+        }
+
+        if (headerEndIndex === -1) throw new Error('Invalid HTTP response');
+        const statusCode = parseInt(new TextDecoder().decode(responseBuffer.slice(0, headerEndIndex)).split('\r\n')[0].match(/HTTP\/\d\.\d\s+(\d+)/)[1]);
+        if (statusCode < 200 || statusCode >= 300) throw new Error(`Connection failed: HTTP ${statusCode}`);
+
+        await writer.write(initialData);
+        writer.releaseLock(); reader.releaseLock();
+        return socket;
+    } catch (error) {
+        try { writer.releaseLock(); } catch (e) { }
+        try { reader.releaseLock(); } catch (e) { }
+        try { socket.close(); } catch (e) { }
+        throw error;
+    }
+}
+//////////////////////////////////////////////////功能性函数///////////////////////////////////////////////
+function surge(content, url, config_JSON) {
+    const 每行内容 = content.includes('\r\n') ? content.split('\r\n') : content.split('\n');
+
+    let 输出内容 = "";
+    for (let x of 每行内容) {
+        if (x.includes('= tro' + 'jan,')) {
+            const host = x.split("sni=")[1].split(",")[0];
+            const 备改内容 = `sni=${host}, skip-cert-verify=${config_JSON.跳过证书验证}`;
+            const 正确内容 = `sni=${host}, skip-cert-verify=${config_JSON.跳过证书验证}, ws=true, ws-path=${config_JSON.PATH}, ws-headers=Host:"${host}"`;
+            输出内容 += x.replace(new RegExp(备改内容, 'g'), 正确内容).replace("[", "").replace("]", "") + '\n';
+        } else {
+            输出内容 += x + '\n';
+        }
+    }
+
+    输出内容 = `#!MANAGED-CONFIG ${url} interval=${config_JSON.优选订阅生成.SUBUpdateTime * 60 * 60} strict=false` + 输出内容.substring(输出内容.indexOf('\n'));
+    return 输出内容;
+}
+
+async function 请求日志记录(env, request, 访问IP, 请求类型 = "Get_SUB", config_JSON) {
+    const KV容量限制 = 4;//MB
+    try {
+        const 当前时间 = new Date();
+        const 日志内容 = { TYPE: 请求类型, IP: 访问IP, ASN: `AS${request.cf.asn || '0'} ${request.cf.asOrganization || 'Unknown'}`, CC: `${request.cf.country || 'N/A'} ${request.cf.city || 'N/A'}`, URL: request.url, UA: request.headers.get('User-Agent') || 'Unknown', TIME: 当前时间.getTime() };
+        let 日志数组 = [];
+        const 现有日志 = await env.KV.get('log.json');
+        if (现有日志) {
+            try {
+                日志数组 = JSON.parse(现有日志);
+                if (!Array.isArray(日志数组)) { 日志数组 = [日志内容]; }
+                else if (请求类型 !== "Get_SUB") {
+                    const 三十分钟前时间戳 = 当前时间.getTime() - 30 * 60 * 1000;
+                    if (日志数组.some(log => log.TYPE !== "Get_SUB" && log.IP === 访问IP && log.URL === request.url && log.UA === (request.headers.get('User-Agent') || 'Unknown') && log.TIME >= 三十分钟前时间戳)) return;
+                    日志数组.push(日志内容);
+                    while (JSON.stringify(日志数组, null, 2).length > KV容量限制 * 1024 * 1024 && 日志数组.length > 0) 日志数组.shift();
+                } else {
+                    日志数组.push(日志内容);
+                    while (JSON.stringify(日志数组, null, 2).length > KV容量限制 * 1024 * 1024 && 日志数组.length > 0) 日志数组.shift();
+                }
+                if (config_JSON.TG.启用) {
+                    try {
+                        const TG_TXT = await env.KV.get('tg.json');
+                        const TG_JSON = JSON.parse(TG_TXT);
+                        await sendMessage(TG_JSON.BotToken, TG_JSON.ChatID, 日志内容, config_JSON);
+                    } catch (error) { console.error(`读取tg.json出错: ${error.message}`) }
+                }
+            } catch (e) { 日志数组 = [日志内容]; }
+        } else { 日志数组 = [日志内容]; }
+        await env.KV.put('log.json', JSON.stringify(日志数组, null, 2));
+    } catch (error) { console.error(`日志记录失败: ${error.message}`); }
+}
+
+async function sendMessage(BotToken, ChatID, 日志内容, config_JSON) {
+    if (!BotToken || !ChatID) return;
+
+    try {
+        const 请求时间 = new Date(日志内容.TIME).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+        const 请求URL = new URL(日志内容.URL);
+        const msg = `<b>#${config_JSON.优选订阅生成.SUBNAME} 日志通知</b>\n\n` +
+            `📌 <b>类型：</b>#${日志内容.TYPE}\n` +
+            `🌐 <b>IP：</b><code>${日志内容.IP}</code>\n` +
+            `📍 <b>位置：</b>${日志内容.CC}\n` +
+            `🏢 <b>ASN：</b>${日志内容.ASN}\n` +
+            `🔗 <b>域名：</b><code>${请求URL.host}</code>\n` +
+            `🔍 <b>路径：</b><code>${请求URL.pathname + 请求URL.search}</code>\n` +
+            `🤖 <b>UA：</b><code>${日志内容.UA}</code>\n` +
+            `📅 <b>时间：</b>${请求时间}\n` +
+            `${config_JSON.CF.Usage.success ? `📊 <b>请求用量：</b>${config_JSON.CF.Usage.total}/100000 <b>${((config_JSON.CF.Usage.total / 100000) * 100).toFixed(2)}%</b>\n` : ''}`;
+
+        const url = `https://api.telegram.org/bot${BotToken}/sendMessage?chat_id=${ChatID}&parse_mode=HTML&text=${encodeURIComponent(msg)}`;
+        return fetch(url, {
+            method: 'GET',
+            headers: {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'User-Agent': 日志内容.UA || 'Unknown',
+            }
+        });
+    } catch (error) { console.error('Error sending message:', error) }
+}
+
+function 掩码敏感信息(文本, 前缀长度 = 3, 后缀长度 = 2) {
+    if (!文本 || typeof 文本 !== 'string') return 文本;
+    if (文本.length <= 前缀长度 + 后缀长度) return 文本; // 如果长度太短，直接返回
+
+    const 前缀 = 文本.slice(0, 前缀长度);
+    const 后缀 = 文本.slice(-后缀长度);
+    const 星号数量 = 文本.length - 前缀长度 - 后缀长度;
+
+    return `${前缀}${'*'.repeat(星号数量)}${后缀}`;
+}
+
+async function MD5MD5(文本) {
+    const 编码器 = new TextEncoder();
+
+    const 第一次哈希 = await crypto.subtle.digest('MD5', 编码器.encode(文本));
+    const 第一次哈希数组 = Array.from(new Uint8Array(第一次哈希));
+    const 第一次十六进制 = 第一次哈希数组.map(字节 => 字节.toString(16).padStart(2, '0')).join('');
+
+    const 第二次哈希 = await crypto.subtle.digest('MD5', 编码器.encode(第一次十六进制.slice(7, 27)));
+    const 第二次哈希数组 = Array.from(new Uint8Array(第二次哈希));
+    const 第二次十六进制 = 第二次哈希数组.map(字节 => 字节.toString(16).padStart(2, '0')).join('');
+
+    return 第二次十六进制.toLowerCase();
+}
+
+function 随机路径() {
+    const 常用路径目录 = ["#", "about", "account", "acg", "act", "activity", "ad", "admin", "ads", "ajax", "album", "albums", "anime", "api", "app", "apps", "archive", "archives", "article", "articles", "ask", "auth", "avatar", "bbs", "bd", "blog", "blogs", "book", "books", "bt", "buy", "cart", "category", "categories", "cb", "channel", "channels", "chat", "china", "city", "class", "classify", "clip", "clips", "club", "cn", "code", "collect", "collection", "comic", "comics", "community", "company", "config", "contact", "content", "course", "courses", "cp", "data", "detail", "details", "dh", "directory", "discount", "discuss", "dl", "dload", "doc", "docs", "document", "documents", "doujin", "download", "downloads", "drama", "edu", "en", "ep", "episode", "episodes", "event", "events", "f", "faq", "favorite", "favourites", "favs", "feedback", "file", "files", "film", "films", "forum", "forums", "friend", "friends", "game", "games", "gif", "go", "go.html", "go.php", "group", "groups", "help", "home", "hot", "htm", "html", "image", "images", "img", "index", "info", "intro", "item", "items", "ja", "jp", "jump", "jump.html", "jump.php", "jumping", "knowledge", "lang", "lesson", "lessons", "lib", "library", "link", "links", "list", "live", "lives", "login", "logout", "m", "mag", "magnet", "mall", "manhua", "map", "member", "members", "message", "messages", "mobile", "movie", "movies", "music", "my", "new", "news", "note", "novel", "novels", "online", "order", "out", "out.html", "out.php", "outbound", "p", "page", "pages", "pay", "payment", "pdf", "photo", "photos", "pic", "pics", "picture", "pictures", "play", "player", "playlist", "post", "posts", "product", "products", "program", "programs", "project", "qa", "question", "rank", "ranking", "read", "readme", "redirect", "redirect.html", "redirect.php", "reg", "register", "res", "resource", "retrieve", "sale", "search", "season", "seasons", "section", "seller", "series", "service", "services", "setting", "settings", "share", "shop", "show", "shows", "site", "soft", "sort", "source", "special", "star", "stars", "static", "stock", "store", "stream", "streaming", "streams", "student", "study", "tag", "tags", "task", "teacher", "team", "tech", "temp", "test", "thread", "tool", "tools", "topic", "topics", "torrent", "trade", "travel", "tv", "txt", "type", "u", "upload", "uploads", "url", "urls", "user", "users", "v", "version", "video", "videos", "view", "vip", "vod", "watch", "web", "wenku", "wiki", "work", "www", "zh", "zh-cn", "zh-tw", "zip"];
+    const 随机数 = Math.floor(Math.random() * 3 + 1);
+    const 随机路径 = 常用路径目录.sort(() => 0.5 - Math.random()).slice(0, 随机数).join('/');
+    return `/${随机路径}`;
+}
+
+function 随机替换通配符(h) {
+    if (!h?.includes('*')) return h;
+    const 字符集 = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    return h.replace(/\*/g, () => {
+        let s = '';
+        for (let i = 0; i < Math.floor(Math.random() * 14) + 3; i++)
+            s += 字符集[Math.floor(Math.random() * 36)];
+        return s;
+    });
+}
+
+function 批量替换域名(内容, hosts, 每组数量 = 2) {
+    let count = 0, currentRandomHost = null;
+    return 内容.replace(/example\.com/g, () => {
+        if (count % 每组数量 === 0) currentRandomHost = 随机替换通配符(hosts[Math.floor(Math.random() * hosts.length)]);
+        count++;
+        return currentRandomHost;
+    });
+}
+
+async function 读取config_JSON(env, hostname, userID, path, 重置配置 = false) {
+    //const host = 随机替换通配符(hostname);
+    const host = hostname;
+    const 初始化开始时间 = performance.now();
+    const 默认配置JSON = {
+        TIME: new Date().toISOString(),
+        HOST: host,
+        HOSTS: [hostname],
+        UUID: userID,
+        协议类型: "v" + "le" + "ss",
+        传输协议: "ws",
+        跳过证书验证: true,
+        启用0RTT: false,
+        TLS分片: null,
+        随机路径: false,
+        优选订阅生成: {
+            local: true, // true: 基于本地的优选地址  false: 优选订阅生成器
+            本地IP库: {
+                随机IP: true, // 当 随机IP 为true时生效，启用随机IP的数量，否则使用KV内的ADD.txt
+                随机数量: 16,
+                指定端口: -1,
+            },
+            SUB: null,
+            SUBNAME: "edge" + "tunnel",
+            SUBUpdateTime: 6, // 订阅更新时间（小时）
+            TOKEN: await MD5MD5(hostname + userID),
+        },
+        订阅转换配置: {
+            SUBAPI: "https://SUBAPI.cmliussss.net",
+            SUBCONFIG: "https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Mini_MultiMode_CF.ini",
+            SUBEMOJI: false,
+        },
+        反代: {
+            PROXYIP: "auto",
+            SOCKS5: {
+                启用: 启用SOCKS5反代,
+                全局: 启用SOCKS5全局反代,
+                账号: 我的SOCKS5账号,
+                白名单: SOCKS5白名单,
+            },
+        },
+        TG: {
+            启用: false,
+            BotToken: null,
+            ChatID: null,
+        },
+        CF: {
+            Email: null,
+            GlobalAPIKey: null,
+            AccountID: null,
+            APIToken: null,
+            Usage: {
+                success: false,
+                pages: 0,
+                workers: 0,
+                total: 0,
+            },
+        }
+    };
+
+    try {
+        let configJSON = await env.KV.get('config.json');
+        if (!configJSON || 重置配置 == true) {
+            await env.KV.put('config.json', JSON.stringify(默认配置JSON, null, 2));
+            config_JSON = 默认配置JSON;
+        } else {
+            config_JSON = JSON.parse(configJSON);
+        }
+    } catch (error) {
+        console.error(`读取config_JSON出错: ${error.message}`);
+        config_JSON = 默认配置JSON;
+    }
+
+    config_JSON.HOST = host;
+    if (!config_JSON.HOSTS) config_JSON.HOSTS = [hostname];
+    if (env.HOST) config_JSON.HOSTS = (await 整理成数组(env.HOST)).map(h => h.toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0]);
+    config_JSON.UUID = userID;
+    config_JSON.PATH = path ? (path.startsWith('/') ? path : '/' + path) : (config_JSON.反代.SOCKS5.启用 ? ('/' + config_JSON.反代.SOCKS5.启用 + (config_JSON.反代.SOCKS5.全局 ? '://' : '=') + config_JSON.反代.SOCKS5.账号) : (config_JSON.反代.PROXYIP === 'auto' ? '/' : `/proxyip=${config_JSON.反代.PROXYIP}`));
+    const TLS分片参数 = config_JSON.TLS分片 == 'Shadowrocket' ? `&fragment=${encodeURIComponent('1,40-60,30-50,tlshello')}` : config_JSON.TLS分片 == 'Happ' ? `&fragment=${encodeURIComponent('3,1,tlshello')}` : '';
+    config_JSON.LINK = `${config_JSON.协议类型}://${userID}@${host}:443?security=tls&type=${config_JSON.传输协议}&host=${host}&sni=${host}&path=${encodeURIComponent(config_JSON.启用0RTT ? config_JSON.PATH + '?ed=2560' : config_JSON.PATH) + TLS分片参数}&encryption=none${config_JSON.跳过证书验证 ? '&allowInsecure=1' : ''}#${encodeURIComponent(config_JSON.优选订阅生成.SUBNAME)}`;
+    config_JSON.优选订阅生成.TOKEN = await MD5MD5(hostname + userID);
+
+    const 初始化TG_JSON = { BotToken: null, ChatID: null };
+    config_JSON.TG = { 启用: config_JSON.TG.启用 ? config_JSON.TG.启用 : false, ...初始化TG_JSON };
+    try {
+        const TG_TXT = await env.KV.get('tg.json');
+        if (!TG_TXT) {
+            await env.KV.put('tg.json', JSON.stringify(初始化TG_JSON, null, 2));
+        } else {
+            const TG_JSON = JSON.parse(TG_TXT);
+            config_JSON.TG.ChatID = TG_JSON.ChatID ? TG_JSON.ChatID : null;
+            config_JSON.TG.BotToken = TG_JSON.BotToken ? 掩码敏感信息(TG_JSON.BotToken) : null;
+        }
+    } catch (error) {
+        console.error(`读取tg.json出错: ${error.message}`);
+    }
+
+    const 初始化CF_JSON = { Email: null, GlobalAPIKey: null, AccountID: null, APIToken: null };
+    config_JSON.CF = { ...初始化CF_JSON, Usage: { success: false, pages: 0, workers: 0, total: 0 } };
+    try {
+        const CF_TXT = await env.KV.get('cf.json');
+        if (!CF_TXT) {
+            await env.KV.put('cf.json', JSON.stringify(初始化CF_JSON, null, 2));
+        } else {
+            const CF_JSON = JSON.parse(CF_TXT);
+            config_JSON.CF.Email = CF_JSON.Email ? CF_JSON.Email : null;
+            config_JSON.CF.GlobalAPIKey = CF_JSON.GlobalAPIKey ? 掩码敏感信息(CF_JSON.GlobalAPIKey) : null;
+            config_JSON.CF.AccountID = CF_JSON.AccountID ? 掩码敏感信息(CF_JSON.AccountID) : null;
+            config_JSON.CF.APIToken = CF_JSON.APIToken ? 掩码敏感信息(CF_JSON.APIToken) : null;
+            const Usage = await getCloudflareUsage(CF_JSON.Email, CF_JSON.GlobalAPIKey, CF_JSON.AccountID, CF_JSON.APIToken);
+            config_JSON.CF.Usage = Usage;
+        }
+    } catch (error) {
+        console.error(`读取cf.json出错: ${error.message}`);
+    }
+
+    config_JSON.加载时间 = (performance.now() - 初始化开始时间).toFixed(2) + 'ms';
+    return config_JSON;
+}
+
+async function 生成随机IP(request, count = 16, 指定端口 = -1) {
+    const asnMap = { '9808': 'cmcc', '4837': 'cu', '4134': 'ct' }, asn = request.cf.asn;
+    const cidr_url = asnMap[asn] ? `https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR/${asnMap[asn]}.txt` : 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt';
+    const cfname = { '9808': 'CF移动优选', '4837': 'CF联通优选', '4134': 'CF电信优选' }[asn] || 'CF官方优选';
+    const cfport = [443, 2053, 2083, 2087, 2096, 8443];
+    let cidrList = [];
+    try { const res = await fetch(cidr_url); cidrList = res.ok ? await 整理成数组(await res.text()) : ['104.16.0.0/13']; } catch { cidrList = ['104.16.0.0/13']; }
+
+    const generateRandomIPFromCIDR = (cidr) => {
+        const [baseIP, prefixLength] = cidr.split('/'), prefix = parseInt(prefixLength), hostBits = 32 - prefix;
+        const ipInt = baseIP.split('.').reduce((a, p, i) => a | (parseInt(p) << (24 - i * 8)), 0);
+        const randomOffset = Math.floor(Math.random() * Math.pow(2, hostBits));
+        const mask = (0xFFFFFFFF << hostBits) >>> 0, randomIP = (((ipInt & mask) >>> 0) + randomOffset) >>> 0;
+        return [(randomIP >>> 24) & 0xFF, (randomIP >>> 16) & 0xFF, (randomIP >>> 8) & 0xFF, randomIP & 0xFF].join('.');
+    };
+
+    const randomIPs = Array.from({ length: count }, () => {
+        const ip = generateRandomIPFromCIDR(cidrList[Math.floor(Math.random() * cidrList.length)]);
+        return `${ip}:${指定端口 === -1 ? cfport[Math.floor(Math.random() * cfport.length)] : 指定端口}#${cfname}`;
+    });
+    return [randomIPs, randomIPs.join('\n')];
+}
+async function 整理成数组(内容) {
+    var 替换后的内容 = 内容.replace(/[	"'\r\n]+/g, ',').replace(/,+/g, ',');
+    if (替换后的内容.charAt(0) == ',') 替换后的内容 = 替换后的内容.slice(1);
+    if (替换后的内容.charAt(替换后的内容.length - 1) == ',') 替换后的内容 = 替换后的内容.slice(0, 替换后的内容.length - 1);
+    const 地址数组 = 替换后的内容.split(',');
+    return 地址数组;
+}
+
+async function 请求优选API(urls, 默认端口 = '443', 超时时间 = 3000) {
+    if (!urls?.length) return [];
+    const results = new Set();
+    await Promise.allSettled(urls.map(async (url) => {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 超时时间);
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            let text = '';
+            try {
+                const buffer = await response.arrayBuffer();
+                const contentType = (response.headers.get('content-type') || '').toLowerCase();
+                const charset = contentType.match(/charset=([^\s;]+)/i)?.[1]?.toLowerCase() || '';
+
+                // 根据 Content-Type 响应头判断编码优先级
+                let decoders = ['utf-8', 'gb2312']; // 默认优先 UTF-8
+                if (charset.includes('gb') || charset.includes('gbk') || charset.includes('gb2312')) {
+                    decoders = ['gb2312', 'utf-8']; // 如果明确指定 GB 系编码，优先尝试 GB2312
+                }
+
+                // 尝试多种编码解码
+                let decodeSuccess = false;
+                for (const decoder of decoders) {
+                    try {
+                        const decoded = new TextDecoder(decoder).decode(buffer);
+                        // 验证解码结果的有效性
+                        if (decoded && decoded.length > 0 && !decoded.includes('\ufffd')) {
+                            text = decoded;
+                            decodeSuccess = true;
+                            break;
+                        } else if (decoded && decoded.length > 0) {
+                            // 如果有替换字符 (U+FFFD)，说明编码不匹配，继续尝试下一个编码
+                            continue;
+                        }
+                    } catch (e) {
+                        // 该编码解码失败，尝试下一个
+                        continue;
+                    }
+                }
+
+                // 如果所有编码都失败或无效，尝试 response.text()
+                if (!decodeSuccess) {
+                    text = await response.text();
+                }
+
+                // 如果返回的是空或无效数据，返回
+                if (!text || text.trim().length === 0) {
+                    return;
+                }
+            } catch (e) {
+                console.error('Failed to decode response:', e);
+                return;
+            }
+            const lines = text.trim().split('\n').map(l => l.trim()).filter(l => l);
+            const isCSV = lines.length > 1 && lines[0].includes(',');
+            const IPV6_PATTERN = /^[^\[\]]*:[^\[\]]*:[^\[\]]/;
+            if (!isCSV) {
+                lines.forEach(line => {
+                    const hashIndex = line.indexOf('#');
+                    const [hostPart, remark] = hashIndex > -1 ? [line.substring(0, hashIndex), line.substring(hashIndex)] : [line, ''];
+                    let hasPort = false;
+                    if (hostPart.startsWith('[')) {
+                        hasPort = /\]:(\d+)$/.test(hostPart);
+                    } else {
+                        const colonIndex = hostPart.lastIndexOf(':');
+                        hasPort = colonIndex > -1 && /^\d+$/.test(hostPart.substring(colonIndex + 1));
+                    }
+                    const port = new URL(url).searchParams.get('port') || 默认端口;
+                    results.add(hasPort ? line : `${hostPart}:${port}${remark}`);
+                });
+            } else {
+                const headers = lines[0].split(',').map(h => h.trim());
+                const dataLines = lines.slice(1);
+                if (headers.includes('IP地址') && headers.includes('端口') && headers.includes('数据中心')) {
+                    const ipIdx = headers.indexOf('IP地址'), portIdx = headers.indexOf('端口');
+                    const remarkIdx = headers.indexOf('国家') > -1 ? headers.indexOf('国家') :
+                        headers.indexOf('城市') > -1 ? headers.indexOf('城市') : headers.indexOf('数据中心');
+                    const tlsIdx = headers.indexOf('TLS');
+                    dataLines.forEach(line => {
+                        const cols = line.split(',').map(c => c.trim());
+                        if (tlsIdx !== -1 && cols[tlsIdx]?.toLowerCase() !== 'true') return;
+                        const wrappedIP = IPV6_PATTERN.test(cols[ipIdx]) ? `[${cols[ipIdx]}]` : cols[ipIdx];
+                        results.add(`${wrappedIP}:${cols[portIdx]}#${cols[remarkIdx]}`);
+                    });
+                } else if (headers.some(h => h.includes('IP')) && headers.some(h => h.includes('延迟')) && headers.some(h => h.includes('下载速度'))) {
+                    const ipIdx = headers.findIndex(h => h.includes('IP'));
+                    const delayIdx = headers.findIndex(h => h.includes('延迟'));
+                    const speedIdx = headers.findIndex(h => h.includes('下载速度'));
+                    const port = new URL(url).searchParams.get('port') || 默认端口;
+                    dataLines.forEach(line => {
+                        const cols = line.split(',').map(c => c.trim());
+                        const wrappedIP = IPV6_PATTERN.test(cols[ipIdx]) ? `[${cols[ipIdx]}]` : cols[ipIdx];
+                        results.add(`${wrappedIP}:${port}#CF优选 ${cols[delayIdx]}ms ${cols[speedIdx]}MB/s`);
+                    });
+                }
+            }
+        } catch (e) { }
+    }));
+    return Array.from(results);
+}
+
+async function 反代参数获取(request) {
+    const url = new URL(request.url);
+    const { pathname, searchParams } = url;
+    const pathLower = pathname.toLowerCase();
+
+    // 初始化
+    我的SOCKS5账号 = searchParams.get('socks5') || searchParams.get('http') || null;
+    启用SOCKS5全局反代 = searchParams.has('globalproxy') || false;
+
+    // 统一处理反代IP参数 (优先级最高,使用正则一次匹配)
+    const proxyMatch = pathLower.match(/\/(proxyip[.=]|pyip=|ip=)(.+)/);
+    if (searchParams.has('proxyip')) {
+        const 路参IP = searchParams.get('proxyip');
+        反代IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
+        return;
+    } else if (proxyMatch) {
+        const 路参IP = proxyMatch[1] === 'proxyip.' ? `proxyip.${proxyMatch[2]}` : proxyMatch[2];
+        反代IP = 路参IP.includes(',') ? 路参IP.split(',')[Math.floor(Math.random() * 路参IP.split(',').length)] : 路参IP;
+        return;
+    }
+
+    // 处理SOCKS5/HTTP代理参数
+    let socksMatch;
+    if ((socksMatch = pathname.match(/\/(socks5?|http):\/?\/?(.+)/i))) {
+        // 格式: /socks5://... 或 /http://...
+        启用SOCKS5反代 = socksMatch[1].toLowerCase() === 'http' ? 'http' : 'socks5';
+        我的SOCKS5账号 = socksMatch[2].split('#')[0];
+        启用SOCKS5全局反代 = true;
+
+        // 处理Base64编码的用户名密码
+        if (我的SOCKS5账号.includes('@')) {
+            const atIndex = 我的SOCKS5账号.lastIndexOf('@');
+            let userPassword = 我的SOCKS5账号.substring(0, atIndex).replaceAll('%3D', '=');
+            if (/^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i.test(userPassword) && !userPassword.includes(':')) {
+                userPassword = atob(userPassword);
+            }
+            我的SOCKS5账号 = `${userPassword}@${我的SOCKS5账号.substring(atIndex + 1)}`;
+        }
+    } else if ((socksMatch = pathname.match(/\/(g?s5|socks5|g?http)=(.+)/i))) {
+        // 格式: /socks5=... 或 /s5=... 或 /gs5=... 或 /http=... 或 /ghttp=...
+        const type = socksMatch[1].toLowerCase();
+        我的SOCKS5账号 = socksMatch[2];
+        启用SOCKS5反代 = type.includes('http') ? 'http' : 'socks5';
+        启用SOCKS5全局反代 = type.startsWith('g') || 启用SOCKS5全局反代; // gs5 或 ghttp 开头启用全局
+    }
+
+    // 解析SOCKS5地址
+    if (我的SOCKS5账号) {
+        try {
+            parsedSocks5Address = await 获取SOCKS5账号(我的SOCKS5账号);
+            启用SOCKS5反代 = searchParams.get('http') ? 'http' : 启用SOCKS5反代;
+        } catch (err) {
+            console.error('解析SOCKS5地址失败:', err.message);
+            启用SOCKS5反代 = null;
+        }
+    } else 启用SOCKS5反代 = null;
+}
+
+async function 获取SOCKS5账号(address) {
+    if (address.includes('@')) {
+        const lastAtIndex = address.lastIndexOf('@');
+        let userPassword = address.substring(0, lastAtIndex).replaceAll('%3D', '=');
+        const base64Regex = /^(?:[A-Z0-9+/]{4})*(?:[A-Z0-9+/]{2}==|[A-Z0-9+/]{3}=)?$/i;
+        if (base64Regex.test(userPassword) && !userPassword.includes(':')) userPassword = atob(userPassword);
+        address = `${userPassword}@${address.substring(lastAtIndex + 1)}`;
+    }
+    const atIndex = address.lastIndexOf("@");
+    const [hostPart, authPart] = atIndex === -1 ? [address, undefined] : [address.substring(atIndex + 1), address.substring(0, atIndex)];
+
+    // 解析认证
+    let username, password;
+    if (authPart) {
+        [username, password] = authPart.split(":");
+        if (!password) throw new Error('无效的 SOCKS 地址格式：认证部分必须是 "username:password" 的形式');
+    }
+
+    // 解析主机端口
+    let hostname, port;
+    if (hostPart.includes("]:")) { // IPv6带端口
+        [hostname, port] = [hostPart.split("]:")[0] + "]", Number(hostPart.split("]:")[1].replace(/[^\d]/g, ''))];
+    } else if (hostPart.startsWith("[")) { // IPv6无端口
+        [hostname, port] = [hostPart, 80];
+    } else { // IPv4/域名
+        const parts = hostPart.split(":");
+        [hostname, port] = parts.length === 2 ? [parts[0], Number(parts[1].replace(/[^\d]/g, ''))] : [hostPart, 80];
+    }
+
+    if (isNaN(port)) throw new Error('无效的 SOCKS 地址格式：端口号必须是数字');
+    if (hostname.includes(":") && !/^\[.*\]$/.test(hostname)) throw new Error('无效的 SOCKS 地址格式：IPv6 地址必须用方括号括起来，如 [2001:db8::1]');
+
+    return { username, password, hostname, port };
+}
+
+async function getCloudflareUsage(Email, GlobalAPIKey, AccountID, APIToken) {
+    const API = "https://api.cloudflare.com/client/v4";
+    const sum = (a) => a?.reduce((t, i) => t + (i?.sum?.requests || 0), 0) || 0;
+    const cfg = { "Content-Type": "application/json" };
+
+    try {
+        if (!AccountID && (!Email || !GlobalAPIKey)) return { success: false, pages: 0, workers: 0, total: 0 };
+
+        if (!AccountID) {
+            const r = await fetch(`${API}/accounts`, {
+                method: "GET",
+                headers: { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey }
+            });
+            if (!r.ok) throw new Error(`账户获取失败: ${r.status}`);
+            const d = await r.json();
+            if (!d?.result?.length) throw new Error("未找到账户");
+            const idx = d.result.findIndex(a => a.name?.toLowerCase().startsWith(Email.toLowerCase()));
+            AccountID = d.result[idx >= 0 ? idx : 0]?.id;
+        }
+
+        const now = new Date();
+        now.setUTCHours(0, 0, 0, 0);
+        const hdr = APIToken ? { ...cfg, "Authorization": `Bearer ${APIToken}` } : { ...cfg, "X-AUTH-EMAIL": Email, "X-AUTH-KEY": GlobalAPIKey };
+
+        const res = await fetch(`${API}/graphql`, {
+            method: "POST",
+            headers: hdr,
+            body: JSON.stringify({
+                query: `query getBillingMetrics($AccountID: String!, $filter: AccountWorkersInvocationsAdaptiveFilter_InputObject) {
+                    viewer { accounts(filter: {accountTag: $AccountID}) {
+                        pagesFunctionsInvocationsAdaptiveGroups(limit: 1000, filter: $filter) { sum { requests } }
+                        workersInvocationsAdaptive(limit: 10000, filter: $filter) { sum { requests } }
+                    } }
+                }`,
+                variables: { AccountID, filter: { datetime_geq: now.toISOString(), datetime_leq: new Date().toISOString() } }
+            })
+        });
+
+        if (!res.ok) throw new Error(`查询失败: ${res.status}`);
+        const result = await res.json();
+        if (result.errors?.length) throw new Error(result.errors[0].message);
+
+        const acc = result?.data?.viewer?.accounts?.[0];
+        if (!acc) throw new Error("未找到账户数据");
+
+        const pages = sum(acc.pagesFunctionsInvocationsAdaptiveGroups);
+        const workers = sum(acc.workersInvocationsAdaptive);
+        const total = pages + workers;
+        console.log(`统计结果 - Pages: ${pages}, Workers: ${workers}, 总计: ${total}`);
+        return { success: true, pages, workers, total };
+
+    } catch (error) {
+        console.error('获取使用量错误:', error.message);
+        return { success: false, pages: 0, workers: 0, total: 0 };
+    }
+}
+
+function sha224(s) {
+    const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+    const r = (n, b) => ((n >>> b) | (n << (32 - b))) >>> 0;
+    s = unescape(encodeURIComponent(s));
+    const l = s.length * 8; s += String.fromCharCode(0x80);
+    while ((s.length * 8) % 512 !== 448) s += String.fromCharCode(0);
+    const h = [0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4];
+    const hi = Math.floor(l / 0x100000000), lo = l & 0xFFFFFFFF;
+    s += String.fromCharCode((hi >>> 24) & 0xFF, (hi >>> 16) & 0xFF, (hi >>> 8) & 0xFF, hi & 0xFF, (lo >>> 24) & 0xFF, (lo >>> 16) & 0xFF, (lo >>> 8) & 0xFF, lo & 0xFF);
+    const w = []; for (let i = 0; i < s.length; i += 4)w.push((s.charCodeAt(i) << 24) | (s.charCodeAt(i + 1) << 16) | (s.charCodeAt(i + 2) << 8) | s.charCodeAt(i + 3));
+    for (let i = 0; i < w.length; i += 16) {
+        const x = new Array(64).fill(0);
+        for (let j = 0; j < 16; j++)x[j] = w[i + j];
+        for (let j = 16; j < 64; j++) {
+            const s0 = r(x[j - 15], 7) ^ r(x[j - 15], 18) ^ (x[j - 15] >>> 3);
+            const s1 = r(x[j - 2], 17) ^ r(x[j - 2], 19) ^ (x[j - 2] >>> 10);
+            x[j] = (x[j - 16] + s0 + x[j - 7] + s1) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, h0] = h;
+        for (let j = 0; j < 64; j++) {
+            const S1 = r(e, 6) ^ r(e, 11) ^ r(e, 25), ch = (e & f) ^ (~e & g), t1 = (h0 + S1 + ch + K[j] + x[j]) >>> 0;
+            const S0 = r(a, 2) ^ r(a, 13) ^ r(a, 22), maj = (a & b) ^ (a & c) ^ (b & c), t2 = (S0 + maj) >>> 0;
+            h0 = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+        }
+        for (let j = 0; j < 8; j++)h[j] = (h[j] + (j === 0 ? a : j === 1 ? b : j === 2 ? c : j === 3 ? d : j === 4 ? e : j === 5 ? f : j === 6 ? g : h0)) >>> 0;
+    }
+    let hex = '';
+    for (let i = 0; i < 7; i++) {
+        for (let j = 24; j >= 0; j -= 8)hex += ((h[i] >>> j) & 0xFF).toString(16).padStart(2, '0');
+    }
+    return hex;
+}
+
+async function 解析地址端口(proxyIP) {
+    proxyIP = proxyIP.toLowerCase();
+    if (proxyIP.includes('.william')) {
+        const williamResult = await (async function 解析William域名(william) {
+            try {
+                const response = await fetch(`https://1.1.1.1/dns-query?name=${william}&type=TXT`, { headers: { 'Accept': 'application/dns-json' } });
+                if (!response.ok) return null;
+                const data = await response.json();
+                const txtRecords = (data.Answer || []).filter(record => record.type === 16).map(record => record.data);
+                if (txtRecords.length === 0) return null;
+                let txtData = txtRecords[0];
+                if (txtData.startsWith('"') && txtData.endsWith('"')) txtData = txtData.slice(1, -1);
+                const prefixes = txtData.replace(/\\010/g, ',').replace(/\n/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+                if (prefixes.length === 0) return null;
+                return prefixes[Math.floor(Math.random() * prefixes.length)];
+            } catch (error) {
+                console.error('解析ProxyIP失败:', error);
+                return null;
+            }
+        })(proxyIP);
+        proxyIP = williamResult || proxyIP;
+    }
+    let 地址 = proxyIP, 端口 = 443;
+    if (proxyIP.includes('.tp')) {
+        const tpMatch = proxyIP.match(/\.tp(\d+)/);
+        if (tpMatch) 端口 = parseInt(tpMatch[1], 10);
+        return [地址, 端口];
+    }
+    if (proxyIP.includes(']:')) {
+        const parts = proxyIP.split(']:');
+        地址 = parts[0] + ']';
+        端口 = parseInt(parts[1], 10) || 端口;
+    } else if (proxyIP.includes(':') && !proxyIP.startsWith('[')) {
+        const colonIndex = proxyIP.lastIndexOf(':');
+        地址 = proxyIP.slice(0, colonIndex);
+        端口 = parseInt(proxyIP.slice(colonIndex + 1), 10) || 端口;
+    }
+    return [地址, 端口];
+}
+
+async function SOCKS5可用性验证(代理协议 = 'socks5', 代理参数) {
+    const startTime = Date.now();
+    try { parsedSocks5Address = await 获取SOCKS5账号(代理参数); } catch (err) { return { success: false, error: err.message, proxy: 代理协议 + "://" + 代理参数, responseTime: Date.now() - startTime }; }
+    const { username, password, hostname, port } = parsedSocks5Address;
+    const 完整代理参数 = username && password ? `${username}:${password}@${hostname}:${port}` : `${hostname}:${port}`;
+    try {
+        const initialData = new Uint8Array(0);
+        const tcpSocket = 代理协议 == 'socks5' ? await socks5Connect('check.socks5.090227.xyz', 80, initialData) : await httpConnect('check.socks5.090227.xyz', 80, initialData);
+        if (!tcpSocket) return { success: false, error: '无法连接到代理服务器', proxy: 代理协议 + "://" + 完整代理参数, responseTime: Date.now() - startTime };
+        try {
+            const writer = tcpSocket.writable.getWriter(), encoder = new TextEncoder();
+            await writer.write(encoder.encode(`GET /cdn-cgi/trace HTTP/1.1\r\nHost: check.socks5.090227.xyz\r\nConnection: close\r\n\r\n`));
+            writer.releaseLock();
+            const reader = tcpSocket.readable.getReader(), decoder = new TextDecoder();
+            let response = '';
+            try { while (true) { const { done, value } = await reader.read(); if (done) break; response += decoder.decode(value, { stream: true }); } } finally { reader.releaseLock(); }
+            await tcpSocket.close();
+            return { success: true, proxy: 代理协议 + "://" + 完整代理参数, ip: response.match(/ip=(.*)/)[1], loc: response.match(/loc=(.*)/)[1], responseTime: Date.now() - startTime };
+        } catch (error) {
+            try { await tcpSocket.close(); } catch (e) { console.log('关闭连接时出错:', e); }
+            return { success: false, error: error.message, proxy: 代理协议 + "://" + 完整代理参数, responseTime: Date.now() - startTime };
+        }
+    } catch (error) { return { success: false, error: error.message, proxy: 代理协议 + "://" + 完整代理参数, responseTime: Date.now() - startTime }; }
+}
+//////////////////////////////////////////////////////HTML伪装页面///////////////////////////////////////////////
+async function nginx() {
+    return `
+	<!DOCTYPE html>
+	<html>
+	<head>
+	<title>Welcome to nginx!</title>
+	<style>
+		body {
+			width: 35em;
+			margin: 0 auto;
+			font-family: Tahoma, Verdana, Arial, sans-serif;
+		}
+	</style>
+	</head>
+	<body>
+	<h1>Welcome to nginx!</h1>
+	<p>If you see this page, the nginx web server is successfully installed and
+	working. Further configuration is required.</p>
+	
+	<p>For online documentation and support please refer to
+	<a href="http://nginx.org/">nginx.org</a>.<br/>
+	Commercial support is available at
+	<a href="http://nginx.com/">nginx.com</a>.</p>
+	
+	<p><em>Thank you for using nginx.</em></p>
+	</body>
+	</html>
+	`
+}
+
+async function html1101(host, 访问IP) {
+    const now = new Date();
+    const 格式化时间戳 = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+    const 随机字符串 = Array.from(crypto.getRandomValues(new Uint8Array(8))).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    return `<!DOCTYPE html>
+<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->
+<!--[if IE 7]>    <html class="no-js ie7 oldie" lang="en-US"> <![endif]-->
+<!--[if IE 8]>    <html class="no-js ie8 oldie" lang="en-US"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en-US"> <!--<![endif]-->
+<head>
+<title>Worker threw exception | ${host} | Cloudflare</title>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" id="cf_styles-css" href="/cdn-cgi/styles/cf.errors.css" />
+<!--[if lt IE 9]><link rel="stylesheet" id='cf_styles-ie-css' href="/cdn-cgi/styles/cf.errors.ie.css" /><![endif]-->
+<style>body{margin:0;padding:0}</style>
+
+
+<!--[if gte IE 10]><!-->
+<script>
+  if (!navigator.cookieEnabled) {
+    window.addEventListener('DOMContentLoaded', function () {
+      var cookieEl = document.getElementById('cookie-alert');
+      cookieEl.style.display = 'block';
+    })
+  }
+</script>
+<!--<![endif]-->
+
+</head>
+<body>
+    <div id="cf-wrapper">
+        <div class="cf-alert cf-alert-error cf-cookie-error" id="cookie-alert" data-translate="enable_cookies">Please enable cookies.</div>
+        <div id="cf-error-details" class="cf-error-details-wrapper">
+            <div class="cf-wrapper cf-header cf-error-overview">
+                <h1>
+                    <span class="cf-error-type" data-translate="error">Error</span>
+                    <span class="cf-error-code">1101</span>
+                    <small class="heading-ray-id">Ray ID: ${随机字符串} &bull; ${格式化时间戳} UTC</small>
+                </h1>
+                <h2 class="cf-subheadline" data-translate="error_desc">Worker threw exception</h2>
+            </div><!-- /.header -->
+    
+            <section></section><!-- spacer -->
+    
+            <div class="cf-section cf-wrapper">
+                <div class="cf-columns two">
+                    <div class="cf-column">
+                        <h2 data-translate="what_happened">What happened?</h2>
+                            <p>You've requested a page on a website (${host}) that is on the <a href="https://www.cloudflare.com/5xx-error-landing?utm_source=error_100x" target="_blank">Cloudflare</a> network. An unknown error occurred while rendering the page.</p>
+                    </div>
+                    
+                    <div class="cf-column">
+                        <h2 data-translate="what_can_i_do">What can I do?</h2>
+                            <p><strong>If you are the owner of this website:</strong><br />refer to <a href="https://developers.cloudflare.com/workers/observability/errors/" target="_blank">Workers - Errors and Exceptions</a> and check Workers Logs for ${host}.</p>
+                    </div>
+                    
+                </div>
+            </div><!-- /.section -->
+    
+            <div class="cf-error-footer cf-wrapper w-240 lg:w-full py-10 sm:py-4 sm:px-8 mx-auto text-center sm:text-left border-solid border-0 border-t border-gray-300">
+    <p class="text-13">
+      <span class="cf-footer-item sm:block sm:mb-1">Cloudflare Ray ID: <strong class="font-semibold"> ${随机字符串}</strong></span>
+      <span class="cf-footer-separator sm:hidden">&bull;</span>
+      <span id="cf-footer-item-ip" class="cf-footer-item hidden sm:block sm:mb-1">
+        Your IP:
+        <button type="button" id="cf-footer-ip-reveal" class="cf-footer-ip-reveal-btn">Click to reveal</button>
+        <span class="hidden" id="cf-footer-ip">${访问IP}</span>
+        <span class="cf-footer-separator sm:hidden">&bull;</span>
+      </span>
+      <span class="cf-footer-item sm:block sm:mb-1"><span>Performance &amp; security by</span> <a rel="noopener noreferrer" href="https://www.cloudflare.com/5xx-error-landing" id="brand_link" target="_blank">Cloudflare</a></span>
+      
+    </p>
+    <script>(function(){function d(){var b=a.getElementById("cf-footer-item-ip"),c=a.getElementById("cf-footer-ip-reveal");b&&"classList"in b&&(b.classList.remove("hidden"),c.addEventListener("click",function(){c.classList.add("hidden");a.getElementById("cf-footer-ip").classList.remove("hidden")}))}var a=document;document.addEventListener&&a.addEventListener("DOMContentLoaded",d)})();</script>
+  </div><!-- /.error-footer -->
+
+        </div><!-- /#cf-error-details -->
+    </div><!-- /#cf-wrapper -->
+
+     <script>
+    window._cf_translation = {};
+    
+    
+  </script> 
+</body>
+</html>`;
+}
