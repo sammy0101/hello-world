@@ -21,16 +21,31 @@ jobs:
           HK_TIME=$(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M')
           echo "HK_TIME=$HK_TIME" >> $GITHUB_ENV
 
-      - name: 下載檔案
+      # --- 新增步驟：安裝簡繁轉換工具 ---
+      - name: 安裝 OpenCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y opencc
+
+      - name: 下載檔案並轉換為繁體
         run: |
           URL_WORKER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js"
           URL_WRANGLER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/wrangler.toml"
           
-          echo "正在下載 _worker.js ..."
-          curl -L -o "_worker.js" "$URL_WORKER"
+          # --- 處理 _worker.js ---
+          echo "正在下載並轉換 _worker.js ..."
+          # 1. 下載到暫存檔
+          curl -L -o "_worker.js.tmp" "$URL_WORKER"
+          # 2. 使用 OpenCC 轉繁體 (s2tw.json 表示簡體轉臺灣正體)
+          opencc -i "_worker.js.tmp" -o "_worker.js" -c s2tw.json
+          # 3. 刪除暫存檔
+          rm "_worker.js.tmp"
           
-          echo "正在下載 wrangler.toml ..."
-          curl -L -o "wrangler.toml" "$URL_WRANGLER"
+          # --- 處理 wrangler.toml ---
+          echo "正在下載並轉換 wrangler.toml ..."
+          curl -L -o "wrangler.toml.tmp" "$URL_WRANGLER"
+          opencc -i "wrangler.toml.tmp" -o "wrangler.toml" -c s2tw.json
+          rm "wrangler.toml.tmp"
 
       # --- 分開處理提交 ---
 
@@ -39,7 +54,7 @@ jobs:
         with:
           # 只針對 _worker.js 進行提交
           file_pattern: '_worker.js'
-          commit_message: "🔄 自動同步 _worker.js (📅 ${{ env.HK_TIME }})"
+          commit_message: "🔄 自動同步 _worker.js (繁體化) (📅 ${{ env.HK_TIME }})"
           commit_user_name: GitHub Actions Bot
           commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
           skip_dirty_check: false    # 確保只在檔案有變動時才提交
@@ -50,7 +65,7 @@ jobs:
         with:
           # 只針對 wrangler.toml 進行提交
           file_pattern: 'wrangler.toml'
-          commit_message: "🔄 自動同步 wrangler.toml (📅 ${{ env.HK_TIME }})"
+          commit_message: "🔄 自動同步 wrangler.toml (繁體化) (📅 ${{ env.HK_TIME }})"
           commit_user_name: GitHub Actions Bot
           commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
           skip_dirty_check: false
