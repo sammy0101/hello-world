@@ -1,54 +1,57 @@
 name: Sync edgetunnel Worker
+
 on:
-schedule:
-- cron: "0 16 * * *" # 香港時間 00:00
-workflow_dispatch:
+  schedule:
+    - cron: "0 16 * * *" # 香港時間 00:00
+  workflow_dispatch:
+
 permissions:
-contents: write
+  contents: write
+
 jobs:
-sync:
-runs-on: ubuntu-latest
-steps:
-- name: 檢出您的倉庫
-uses: actions/checkout@v4
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 檢出您的倉庫
+        uses: actions/checkout@v4
 
-- name: 設定時間變數
-    run: |
-      # 預先計算香港時間並存入環境變數
-      HK_TIME=$(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M')
-      echo "HK_TIME=$HK_TIME" >> $GITHUB_ENV
+      - name: 設定時間變數
+        run: |
+          # 預先計算香港時間並存入環境變數
+          HK_TIME=$(TZ='Asia/Hong_Kong' date +'%Y-%m-%d %H:%M')
+          echo "HK_TIME=$HK_TIME" >> $GITHUB_ENV
 
-  - name: 下載檔案
-    run: |
-      URL_WORKER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js"
-      URL_WRANGLER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/wrangler.toml"
-      
-      echo "正在下載 _worker.js ..."
-      curl -L -o "_worker.js" "$URL_WORKER"
-      
-      echo "正在下載 wrangler.toml ..."
-      curl -L -o "wrangler.toml" "$URL_WRANGLER"
+      - name: 下載檔案
+        run: |
+          URL_WORKER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/_worker.js"
+          URL_WRANGLER="https://github.com/cmliu/edgetunnel/raw/refs/heads/main/wrangler.toml"
+          
+          echo "正在下載 _worker.js ..."
+          curl -L -o "_worker.js" "$URL_WORKER"
+          
+          echo "正在下載 wrangler.toml ..."
+          curl -L -o "wrangler.toml" "$URL_WRANGLER"
 
-  # --- 分開處理提交 ---
+      # --- 分開處理提交 ---
 
-  - name: 提交 _worker.js (如果有變更)
-    uses: stefanzweifel/git-auto-commit-action@v5
-    with:
-      # 只針對 _worker.js 進行提交
-      file_pattern: '_worker.js'
-      commit_message: "🔄 自動同步 _worker.js (📅 ${{ env.HK_TIME }})"
-      commit_user_name: GitHub Actions Bot
-      commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
-      skip_dirty_check: false    # 確保只在檔案有變動時才提交
-      skip_fetch: true           # 優化速度
+      - name: 提交 _worker.js (如果有變更)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          # 只針對 _worker.js 進行提交
+          file_pattern: '_worker.js'
+          commit_message: "🔄 自動同步 _worker.js (📅 ${{ env.HK_TIME }})"
+          commit_user_name: GitHub Actions Bot
+          commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+          skip_dirty_check: false    # 確保只在檔案有變動時才提交
+          skip_fetch: true           # 優化速度
 
-  - name: 提交 wrangler.toml (如果有變更)
-    uses: stefanzweifel/git-auto-commit-action@v5
-    with:
-      # 只針對 wrangler.toml 進行提交
-      file_pattern: 'wrangler.toml'
-      commit_message: "🔄 自動同步 wrangler.toml (📅 ${{ env.HK_TIME }})"
-      commit_user_name: GitHub Actions Bot
-      commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
-      skip_dirty_check: false
-      skip_fetch: true
+      - name: 提交 wrangler.toml (如果有變更)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          # 只針對 wrangler.toml 進行提交
+          file_pattern: 'wrangler.toml'
+          commit_message: "🔄 自動同步 wrangler.toml (📅 ${{ env.HK_TIME }})"
+          commit_user_name: GitHub Actions Bot
+          commit_user_email: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+          skip_dirty_check: false
+          skip_fetch: true
